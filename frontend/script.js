@@ -1,5 +1,5 @@
 // AI Traffic Dashboard JavaScript
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://184.73.137.40:8000';
 
 // Global variables
 let currentVideoData = null;
@@ -1462,7 +1462,7 @@ async function resetAnalytics() {
         try {
             showNotification('🔄 Resetting all metrics...', 'info');
             
-            const response = await fetch('http://localhost:8000/metrics/reset', {
+            const response = await fetch(`${API_BASE_URL}/metrics/reset`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
