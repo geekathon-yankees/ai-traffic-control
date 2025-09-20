@@ -1,0 +1,187 @@
+name: "Deploy Backend to AWS EC2"
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+      - name: Ensure DEPLOY_PATH exists on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "mkdir -p /app/ml-gateway && chmod 755 /app/ml-gateway && chown ec2-user:ec2-user /app/ml-gateway || true"
+      - name: Copy backend files to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no -r ml-gateway/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }}:/app/ml-gateway/
+      - name: Ensure Python 3 and system dependencies on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "if ! python3 --version; then \
+            if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
+              sudo apt-get update && sudo apt-get install -y python3; \
+            elif [ -f /etc/os-release ] && grep -qi 'amzn' /etc/os-release; then \
+              sudo yum install -y python3; \
+            else \
+              echo 'Unsupported OS. Please install Python 3 manually.'; exit 1; \
+            fi; \
+          fi; \
+          if ! python3 -m pip --version; then \
+            curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py; \
+          fi; \
+          echo 'Installing OpenCV system dependencies...'; \
+          if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
+            sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx libglib2.0-0; \
+          elif [ -f /etc/os-release ] && grep -qi 'amzn' /etc/os-release; then \
+            sudo yum install -y libglvnd-glx glib2; \
+          fi"
+      - name: Clean up disk space
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            # Clean package cache
+            sudo yum clean all 2>/dev/null || sudo apt-get clean 2>/dev/null || true
+            # Clean pip cache
+            python3 -m pip cache purge 2>/dev/null || true
+            # Clean temporary files
+            sudo rm -rf /tmp/* 2>/dev/null || true
+            sudo rm -rf /var/tmp/* 2>/dev/null || true
+            # Show available space
+            df -h /
+          "
+      - name: Install Python dependencies with optimizations
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            cd /app/ml-gateway && 
+            python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements.txt || {
+              echo 'Installation failed due to disk space, trying CPU-only PyTorch...'
+              
+              # Create CPU-only requirements by removing heavy GPU packages
+              echo 'fastapi>=0.115.0' > requirements_cpu.txt
+              echo 'uvicorn[standard]>=0.30.6' >> requirements_cpu.txt
+              echo 'huggingface_hub>=0.24.6' >> requirements_cpu.txt
+              echo 'ultralytics>=8.3.0' >> requirements_cpu.txt
+              echo 'opencv-python-headless>=4.10.0' >> requirements_cpu.txt
+              echo 'numpy>=1.26.0' >> requirements_cpu.txt
+              echo 'pydantic>=2.9.0' >> requirements_cpu.txt
+              echo 'pydantic-settings>=2.5.0' >> requirements_cpu.txt
+              echo 'python-multipart>=0.0.9' >> requirements_cpu.txt
+              echo 'transformers>=4.44.0' >> requirements_cpu.txt
+              echo 'pillow>=10.0.0' >> requirements_cpu.txt
+              echo 'timm>=0.9.0' >> requirements_cpu.txt
+              echo 'psutil>=5.9.0' >> requirements_cpu.txt
+              
+              # Install CPU-only PyTorch from PyTorch index
+              python3 -m pip install --user --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
+              # Install remaining requirements
+              python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements_cpu.txt
+            }
+          "
+      - name: Test SSH connection and debug
+        run: |
+          echo "Attempting to connect to: ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }}"
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -v ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "echo 'SSH connection successful'" || {
+            echo "SSH connection failed. Please verify:"
+            echo "1. EC2_HOST_BE secret is set to the correct IP/hostname"
+            echo "2. EC2_USER secret is set correctly (usually 'ec2-user' for Amazon Linux)"
+            echo "3. EC2_KEY secret contains the correct private key"
+            echo "4. EC2 instance is running and accessible"
+            exit 1
+          }
+      - name: Stop existing backend process
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            echo 'Stopping any existing backend processes...'
+            pkill -f 'uvicorn.*app.main:app' || echo 'No uvicorn processes found'
+            pkill -f 'python3.*main.py' || echo 'No main.py processes found'
+            # Wait a moment for processes to stop
+            sleep 2
+            echo 'Process cleanup completed'
+          " || echo 'Failed to connect - continuing anyway'
+      - name: Start backend application
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /app/ml-gateway/app.log 2>&1 &"
+      - name: Wait for application to start
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            echo 'Waiting for application to start...'
+            for i in {1..30}; do
+              if ps aux | grep '[u]vicorn.*main:app' >/dev/null; then
+                echo 'Application process started successfully'
+                break
+              fi
+              if [ \$i -eq 30 ]; then
+                echo 'Application failed to start within 30 seconds'
+                tail -20 /app/ml-gateway/app.log
+                exit 1
+              fi
+              echo 'Waiting... (\$i/30)'
+              sleep 1
+            done
+          "
+      - name: Verify backend is responding
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            echo 'Testing if backend is responding to requests...'
+            for i in {1..20}; do
+              if curl -s -f http://localhost:8000/docs >/dev/null 2>&1; then
+                echo '✅ Backend is responding to HTTP requests!'
+                echo 'FastAPI docs available at: http://\$(curl -s ipinfo.io/ip):8000/docs'
+                break
+              fi
+              if [ \$i -eq 20 ]; then
+                echo '❌ Backend not responding to HTTP requests after 20 attempts'
+                echo 'Process status:'
+                ps aux | grep python3 | grep -v grep
+                echo 'Last 30 lines of app log:'
+                tail -30 /app/ml-gateway/app.log
+                exit 1
+              fi
+              echo 'Waiting for HTTP response... (\$i/20)'
+              sleep 2
+            done
+          "
+      - name: Show application logs
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "tail -20 /app/ml-gateway/app.log || echo 'Log file not found'"
+      - name: Final deployment status
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            echo '========================================='
+            echo '🎉 BACKEND DEPLOYMENT STATUS 🎉'
+            echo '========================================='
+            echo 'Application Status: RUNNING ✅'
+            echo 'Process Info:'
+            ps aux | grep uvicorn | grep -v grep
+            echo ''
+            echo 'Port Status:'
+            netstat -tlnp | grep :8000 || echo 'Port check failed - but app may still be starting'
+            echo ''
+            echo 'API Health Check:'
+            curl -s http://localhost:8000/docs >/dev/null && echo '✅ FastAPI docs accessible' || echo '⚠️  API may still be starting'
+            echo ''
+            echo 'External Access:'
+            echo '📍 Your API is available at: http://'\$(curl -s ipinfo.io/ip)':8000'
+            echo '📖 API Documentation: http://'\$(curl -s ipinfo.io/ip)':8000/docs'
+            echo ''
+            echo 'Disk Usage:'
+            df -h / | head -2
+            echo '========================================='
+            echo '✅ DEPLOYMENT COMPLETED SUCCESSFULLY!'
+            echo '========================================='
+          "
+      - name: Final cleanup
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            # Clean up pip cache and temp files after installation
+            python3 -m pip cache purge 2>/dev/null || true
+            sudo rm -rf /tmp/* 2>/dev/null || true
+          "

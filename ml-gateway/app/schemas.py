@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class BBox(BaseModel):
     x1: float
@@ -10,7 +10,7 @@ class BBox(BaseModel):
 class Detection(BaseModel):
     bbox: BBox
     label: str
-    cls_id: int | None = None
+    cls_id: Optional[int] = None
     score: float
 
 class ImageDetections(BaseModel):
@@ -28,5 +28,5 @@ class VideoDetections(BaseModel):
     processed_frames: int
     fps_sample: int
     results: List[VideoFrameDetections] = Field(default_factory=list)
-    counts_by_label: dict[str, int] = Field(default_factory=dict)
+    counts_by_label: Dict[str, int] = Field(default_factory=dict)
     tracking_info: Optional[dict] = Field(default=None, description="Object tracking information for unique counts")
