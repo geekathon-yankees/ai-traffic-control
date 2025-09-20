@@ -542,14 +542,186 @@ function displayVideoTimeline(result) {
         </div>` : '');
 }
 
-// Play Video Detections (placeholder for future enhancement)
+// Play Video Detections with real-time overlay
 function playVideoDetections() {
     if (!currentVideoData) {
         showNotification('No video data available', 'error');
         return;
     }
     
-    showNotification('Video detection playback feature coming soon!', 'info');
+    const video = document.getElementById('preview-video');
+    const playBtn = document.getElementById('play-detections');
+    
+    if (!video || !video.src) {
+        showNotification('No video loaded', 'error');
+        return;
+    }
+    
+    // Create or get existing canvas overlay
+    let canvas = document.getElementById('detection-overlay');
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'detection-overlay';
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.pointerEvents = 'none';
+        canvas.style.zIndex = '10';
+        
+        // Make video container relative positioned
+        const videoContainer = video.parentElement;
+        if (videoContainer.style.position !== 'relative') {
+            videoContainer.style.position = 'relative';
+        }
+        videoContainer.appendChild(canvas);
+    }
+    
+    const ctx = canvas.getContext('2d');
+    let animationFrame = null;
+    let isPlaying = false;
+    
+    // Set canvas size to match video
+    const resizeCanvas = () => {
+        canvas.width = video.videoWidth || video.offsetWidth;
+        canvas.height = video.videoHeight || video.offsetHeight;
+        canvas.style.width = video.offsetWidth + 'px';
+        canvas.style.height = video.offsetHeight + 'px';
+    };
+    
+    // Draw detections for current video time
+    const drawDetections = () => {
+        if (!isPlaying) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const currentTime = video.currentTime;
+        const fps = currentVideoData.fps_sample || 1;
+        
+        // Find the closest detection frame
+        let closestFrame = null;
+        let minTimeDiff = Infinity;
+        
+        currentVideoData.results.forEach(frame => {
+            const timeDiff = Math.abs(frame.time_sec - currentTime);
+            if (timeDiff < minTimeDiff) {
+                minTimeDiff = timeDiff;
+                closestFrame = frame;
+            }
+        });
+        
+        // Draw detections if we have a close frame (within 0.5 seconds)
+        if (closestFrame && minTimeDiff < 0.5) {
+            const scaleX = canvas.width / video.videoWidth;
+            const scaleY = canvas.height / video.videoHeight;
+            
+            closestFrame.detections.forEach((detection, index) => {
+                const { bbox, label, score } = detection;
+                
+                // Get color for this label
+                if (!detectionColors[label]) {
+                    detectionColors[label] = colors[colorIndex % colors.length];
+                    colorIndex++;
+                }
+                const color = detectionColors[label];
+                
+                // Scale bounding box coordinates
+                const x1 = bbox.x1 * scaleX;
+                const y1 = bbox.y1 * scaleY;
+                const x2 = bbox.x2 * scaleX;
+                const y2 = bbox.y2 * scaleY;
+                const width = x2 - x1;
+                const height = y2 - y1;
+                
+                // Draw bounding box
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x1, y1, width, height);
+                
+                // Draw label background
+                const labelText = `${label} ${Math.round((score || 0) * 100)}%`;
+                ctx.font = 'bold 16px Inter';
+                const metrics = ctx.measureText(labelText);
+                const labelPadding = 8;
+                const labelHeight = 24;
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(x1, y1 - labelHeight - labelPadding, metrics.width + labelPadding * 2, labelHeight + labelPadding);
+                
+                // Draw label text
+                ctx.fillStyle = 'white';
+                ctx.fillText(labelText, x1 + labelPadding, y1 - labelPadding);
+            });
+            
+            // Show frame info
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, 10, 300, 50);
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Inter';
+            ctx.fillText(`Frame: ${closestFrame.frame_index}/${currentVideoData.total_frames}`, 20, 30);
+            ctx.fillText(`Time: ${currentTime.toFixed(1)}s | Detections: ${closestFrame.detections.length}`, 20, 50);
+        }
+        
+        if (isPlaying && !video.paused) {
+            animationFrame = requestAnimationFrame(drawDetections);
+        }
+    };
+    
+    // Check if overlay is currently active
+    const isCurrentlyActive = playBtn.dataset.active === 'true';
+    
+    // Toggle playback
+    if (isCurrentlyActive) {
+        // Stop detection overlay
+        isPlaying = false;
+        playBtn.dataset.active = 'false';
+        if (animationFrame) {
+            cancelAnimationFrame(animationFrame);
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'none';
+        playBtn.innerHTML = '<i class="fas fa-play"></i> Play with Detections';
+        playBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+        
+        showNotification('Detection overlay stopped', 'info');
+    } else {
+        // Start detection overlay
+        isPlaying = true;
+        playBtn.dataset.active = 'true';
+        canvas.style.display = 'block';
+        resizeCanvas();
+        
+        // Update button
+        playBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Detections';
+        playBtn.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+        
+        // Setup video event listeners
+        video.addEventListener('loadedmetadata', resizeCanvas);
+        video.addEventListener('resize', resizeCanvas);
+        
+        // Start drawing loop
+        drawDetections();
+        
+        // Continue drawing while video plays
+        video.addEventListener('play', () => {
+            if (isPlaying) drawDetections();
+        });
+        
+        video.addEventListener('pause', () => {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+        });
+        
+        video.addEventListener('ended', () => {
+            isPlaying = false;
+            playBtn.dataset.active = 'false';
+            canvas.style.display = 'none';
+            playBtn.innerHTML = '<i class="fas fa-play"></i> Play with Detections';
+            playBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+        });
+        
+        showNotification('Detection overlay activated! Play the video to see detections.', 'success');
+    }
 }
 
 // Utility Functions
