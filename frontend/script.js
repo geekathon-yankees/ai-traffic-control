@@ -388,7 +388,7 @@ async function displayVideoResults(file, result) {
     document.getElementById('video-results').scrollIntoView({ behavior: 'smooth' });
 }
 
-// Draw Bounding Boxes
+// Draw Bounding Boxes with Improved Label Positioning
 function drawBoundingBoxes(ctx, detections, canvasWidth, canvasHeight, originalWidth, originalHeight) {
     if (!detections || detections.length === 0) {
         console.log('🔍 No detections to draw');
@@ -405,6 +405,9 @@ function drawBoundingBoxes(ctx, detections, canvasWidth, canvasHeight, originalW
         originalSize: { width: originalWidth, height: originalHeight },
         scales: { x: scaleX, y: scaleY }
     });
+    
+    // Store label positions to prevent overlaps
+    const usedLabelPositions = [];
     
     detections.forEach((detection, index) => {
         const { bbox, label, score } = detection;
@@ -423,55 +426,234 @@ function drawBoundingBoxes(ctx, detections, canvasWidth, canvasHeight, originalW
         
         // Scale bounding box coordinates
         const scaledBbox = {
-            x1: bbox.x1 * scaleX,
-            y1: bbox.y1 * scaleY,
-            x2: bbox.x2 * scaleX,
-            y2: bbox.y2 * scaleY
+            x1: Math.max(0, bbox.x1 * scaleX),
+            y1: Math.max(0, bbox.y1 * scaleY),
+            x2: Math.min(canvasWidth, bbox.x2 * scaleX),
+            y2: Math.min(canvasHeight, bbox.y2 * scaleY)
         };
         
-        // Set drawing style
+        // Enhanced label styling
         ctx.strokeStyle = color;
         ctx.fillStyle = color;
         ctx.lineWidth = 3;
         ctx.font = 'bold 14px Inter';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
         
-        // Draw bounding box
+        // Draw bounding box with rounded corners effect
         const width = scaledBbox.x2 - scaledBbox.x1;
         const height = scaledBbox.y2 - scaledBbox.y1;
+        
+        // Draw main rectangle
         ctx.strokeRect(scaledBbox.x1, scaledBbox.y1, width, height);
         
-        // Draw label background
+        // Add corner accents for better visibility
+        ctx.lineWidth = 4;
+        const cornerSize = Math.min(15, width * 0.1, height * 0.1);
+        
+        // Top-left corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x1, scaledBbox.y1 + cornerSize);
+        ctx.lineTo(scaledBbox.x1, scaledBbox.y1);
+        ctx.lineTo(scaledBbox.x1 + cornerSize, scaledBbox.y1);
+        ctx.stroke();
+        
+        // Top-right corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x2 - cornerSize, scaledBbox.y1);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y1);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y1 + cornerSize);
+        ctx.stroke();
+        
+        // Bottom-left corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x1, scaledBbox.y2 - cornerSize);
+        ctx.lineTo(scaledBbox.x1, scaledBbox.y2);
+        ctx.lineTo(scaledBbox.x1 + cornerSize, scaledBbox.y2);
+        ctx.stroke();
+        
+        // Bottom-right corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x2 - cornerSize, scaledBbox.y2);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y2);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y2 - cornerSize);
+        ctx.stroke();
+        
+        // Reset shadow for label drawing
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        
+        // Enhanced label positioning
         const labelText = `${label} ${Math.round((score || 0) * 100)}%`;
         const metrics = ctx.measureText(labelText);
-        const labelPadding = 6;
-        const labelHeight = 20;
+        const labelPadding = 8;
+        const labelHeight = 22;
+        const labelWidth = metrics.width + labelPadding * 2;
         
-        // Ensure label stays within canvas bounds
-        const labelY = Math.max(labelHeight + labelPadding, scaledBbox.y1);
-        
-        ctx.fillRect(
-            scaledBbox.x1, 
-            labelY - labelHeight - labelPadding,
-            metrics.width + labelPadding * 2,
-            labelHeight + labelPadding
+        // Calculate optimal label position
+        const labelPos = calculateOptimalLabelPosition(
+            scaledBbox, 
+            labelWidth, 
+            labelHeight + labelPadding, 
+            canvasWidth, 
+            canvasHeight,
+            usedLabelPositions
         );
         
-        // Draw label text
-        ctx.fillStyle = 'white';
+        // Draw label with improved styling
+        const gradient = ctx.createLinearGradient(0, labelPos.y - labelHeight, 0, labelPos.y);
+        gradient.addColorStop(0, color);
+        gradient.addColorStop(1, adjustColorBrightness(color, -0.2));
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+        
+        // Add label border for better definition
+        ctx.strokeStyle = adjustColorBrightness(color, -0.3);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+        
+        // Draw label text with better contrast
+        ctx.fillStyle = getContrastColor(color);
+        ctx.font = 'bold 13px Inter';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        
+        // Add text shadow for better readability
+        ctx.shadowColor = color === '#FFFFFF' || isLightColor(color) ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        
         ctx.fillText(
             labelText, 
-            scaledBbox.x1 + labelPadding, 
-            labelY - labelPadding
+            labelPos.x + labelPadding, 
+            labelPos.y - labelHeight / 2
         );
+        
+        // Reset text shadow
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        
+        // Store this label position to prevent overlaps
+        usedLabelPositions.push({
+            x: labelPos.x,
+            y: labelPos.y - labelHeight,
+            width: labelWidth,
+            height: labelHeight
+        });
         
         console.log('🎯 Drew detection:', {
             label,
             score: Math.round((score || 0) * 100),
             originalBbox: bbox,
             scaledBbox,
+            labelPos,
             color
         });
     });
+}
+
+// Helper function to calculate optimal label position
+function calculateOptimalLabelPosition(bbox, labelWidth, labelHeight, canvasWidth, canvasHeight, usedPositions) {
+    const margin = 4;
+    
+    // Preferred positions in order of preference
+    const positions = [
+        // Above the box (preferred)
+        { x: bbox.x1, y: bbox.y1 - margin },
+        // Below the box
+        { x: bbox.x1, y: bbox.y2 + labelHeight + margin },
+        // Inside top
+        { x: bbox.x1 + margin, y: bbox.y1 + labelHeight + margin },
+        // Inside bottom
+        { x: bbox.x1 + margin, y: bbox.y2 - margin },
+        // Right side
+        { x: bbox.x2 + margin, y: bbox.y1 + labelHeight },
+        // Left side
+        { x: bbox.x1 - labelWidth - margin, y: bbox.y1 + labelHeight }
+    ];
+    
+    for (const pos of positions) {
+        // Adjust position to stay within canvas bounds
+        const adjustedPos = {
+            x: Math.max(0, Math.min(pos.x, canvasWidth - labelWidth)),
+            y: Math.max(labelHeight, Math.min(pos.y, canvasHeight))
+        };
+        
+        // Check if this position overlaps with existing labels
+        if (!overlapsWithExistingLabels(adjustedPos, labelWidth, labelHeight, usedPositions)) {
+            return adjustedPos;
+        }
+    }
+    
+    // If no non-overlapping position found, use the first adjusted position
+    return {
+        x: Math.max(0, Math.min(positions[0].x, canvasWidth - labelWidth)),
+        y: Math.max(labelHeight, Math.min(positions[0].y, canvasHeight))
+    };
+}
+
+// Helper function to check label overlaps
+function overlapsWithExistingLabels(pos, width, height, usedPositions) {
+    const testRect = {
+        x: pos.x,
+        y: pos.y - height,
+        width: width,
+        height: height
+    };
+    
+    return usedPositions.some(usedPos => {
+        return !(testRect.x + testRect.width < usedPos.x ||
+                usedPos.x + usedPos.width < testRect.x ||
+                testRect.y + testRect.height < usedPos.y ||
+                usedPos.y + usedPos.height < testRect.y);
+    });
+}
+
+// Helper function to adjust color brightness
+function adjustColorBrightness(color, percent) {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent * 100);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+        (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+}
+
+// Helper function to get contrasting text color
+function getContrastColor(hexColor) {
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return white for dark backgrounds, black for light backgrounds
+    return luminance > 0.5 ? '#000000' : '#FFFFFF';
+}
+
+// Helper function to check if color is light
+function isLightColor(hexColor) {
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5;
 }
 
 // Display Detection List
@@ -614,6 +796,9 @@ function playVideoDetections() {
             const scaleX = canvas.width / video.videoWidth;
             const scaleY = canvas.height / video.videoHeight;
             
+            // Store label positions to prevent overlaps in video overlay
+            const usedVideoLabelPositions = [];
+            
             closestFrame.detections.forEach((detection, index) => {
                 const { bbox, label, score } = detection;
                 
@@ -624,32 +809,127 @@ function playVideoDetections() {
                 }
                 const color = detectionColors[label];
                 
-                // Scale bounding box coordinates
-                const x1 = bbox.x1 * scaleX;
-                const y1 = bbox.y1 * scaleY;
-                const x2 = bbox.x2 * scaleX;
-                const y2 = bbox.y2 * scaleY;
-                const width = x2 - x1;
-                const height = y2 - y1;
+                // Scale and clamp bounding box coordinates
+                const scaledBbox = {
+                    x1: Math.max(0, bbox.x1 * scaleX),
+                    y1: Math.max(0, bbox.y1 * scaleY),
+                    x2: Math.min(canvas.width, bbox.x2 * scaleX),
+                    y2: Math.min(canvas.height, bbox.y2 * scaleY)
+                };
                 
-                // Draw bounding box
+                const width = scaledBbox.x2 - scaledBbox.x1;
+                const height = scaledBbox.y2 - scaledBbox.y1;
+                
+                // Enhanced bounding box drawing with shadow
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 3;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 3;
-                ctx.strokeRect(x1, y1, width, height);
+                ctx.strokeRect(scaledBbox.x1, scaledBbox.y1, width, height);
                 
-                // Draw label background
+                // Add corner accents for video overlay
+                ctx.lineWidth = 4;
+                const cornerSize = Math.min(12, width * 0.08, height * 0.08);
+                
+                // Draw corner accents
+                const corners = [
+                    [[scaledBbox.x1, scaledBbox.y1 + cornerSize], [scaledBbox.x1, scaledBbox.y1], [scaledBbox.x1 + cornerSize, scaledBbox.y1]],
+                    [[scaledBbox.x2 - cornerSize, scaledBbox.y1], [scaledBbox.x2, scaledBbox.y1], [scaledBbox.x2, scaledBbox.y1 + cornerSize]],
+                    [[scaledBbox.x1, scaledBbox.y2 - cornerSize], [scaledBbox.x1, scaledBbox.y2], [scaledBbox.x1 + cornerSize, scaledBbox.y2]],
+                    [[scaledBbox.x2 - cornerSize, scaledBbox.y2], [scaledBbox.x2, scaledBbox.y2], [scaledBbox.x2, scaledBbox.y2 - cornerSize]]
+                ];
+                
+                corners.forEach(corner => {
+                    ctx.beginPath();
+                    ctx.moveTo(corner[0][0], corner[0][1]);
+                    ctx.lineTo(corner[1][0], corner[1][1]);
+                    ctx.lineTo(corner[2][0], corner[2][1]);
+                    ctx.stroke();
+                });
+                
+                // Reset shadow for label drawing
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // Enhanced video label positioning
                 const labelText = `${label} ${Math.round((score || 0) * 100)}%`;
-                ctx.font = 'bold 16px Inter';
+                ctx.font = 'bold 15px Inter';
                 const metrics = ctx.measureText(labelText);
                 const labelPadding = 8;
                 const labelHeight = 24;
+                const labelWidth = metrics.width + labelPadding * 2;
                 
-                ctx.fillStyle = color;
-                ctx.fillRect(x1, y1 - labelHeight - labelPadding, metrics.width + labelPadding * 2, labelHeight + labelPadding);
+                // Calculate optimal label position for video
+                const labelPos = calculateOptimalLabelPosition(
+                    scaledBbox, 
+                    labelWidth, 
+                    labelHeight, 
+                    canvas.width, 
+                    canvas.height,
+                    usedVideoLabelPositions
+                );
                 
-                // Draw label text
-                ctx.fillStyle = 'white';
-                ctx.fillText(labelText, x1 + labelPadding, y1 - labelPadding);
+                // Draw enhanced label background with gradient
+                const gradient = ctx.createLinearGradient(0, labelPos.y - labelHeight, 0, labelPos.y);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, adjustColorBrightness(color, -0.3));
+                
+                // Add subtle shadow to label for better video visibility
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+                
+                // Add label border
+                ctx.strokeStyle = adjustColorBrightness(color, -0.4);
+                ctx.lineWidth = 2;
+                ctx.strokeRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+                
+                // Reset shadow for text
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // Draw label text with enhanced readability for video
+                ctx.fillStyle = getContrastColor(color);
+                ctx.font = 'bold 14px Inter';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                
+                // Add strong text shadow for video readability
+                ctx.shadowColor = isLightColor(color) ? 'rgba(0, 0, 0, 1)' : 'rgba(255, 255, 255, 1)';
+                ctx.shadowBlur = 3;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+                
+                ctx.fillText(
+                    labelText, 
+                    labelPos.x + labelPadding, 
+                    labelPos.y - labelHeight / 2
+                );
+                
+                // Reset all shadows
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // Store this label position to prevent overlaps
+                usedVideoLabelPositions.push({
+                    x: labelPos.x,
+                    y: labelPos.y - labelHeight,
+                    width: labelWidth,
+                    height: labelHeight
+                });
             });
             
             // Show frame info
@@ -876,37 +1156,40 @@ function updateAnalyticsDashboard() {
 function updateVehicleCO2Displays() {
     // Update individual vehicle CO2 displays
     const vehicleTypes = ['car', 'truck', 'bus'];
-    
+
     vehicleTypes.forEach(vehicleType => {
         const co2Element = document.getElementById(`co2-${vehicleType}`);
         const trendElement = document.getElementById(`co2-${vehicleType}-trend`);
-        
+
         if (co2Element) {
             const co2Value = analytics.co2ByVehicleType[vehicleType];
             const co2InGrams = (co2Value * 1000).toFixed(0);
             co2Element.textContent = `${co2InGrams}g`;
-            
+
             // Update trend color and message based on emissions level
             if (trendElement) {
                 const vehicleCount = analytics.entityCounts[vehicleType];
                 const emissionRate = CO2_EMISSIONS[vehicleType] * 1000; // Convert to grams
-                
+
                 if (vehicleCount === 0) {
-                    trendElement.textContent = `${emissionRate}g per ${vehicleType}`;
+                    trendElement.textContent = `${emissionRate}g baseline`;
                     trendElement.style.color = '#6c757d'; // Gray for no detections
                 } else if (co2Value < 0.1) {
-                    trendElement.textContent = `🌱 Low impact (${vehicleCount} detected)`;
+                    trendElement.textContent = `Low impact (${vehicleCount} detected)`;
                     trendElement.style.color = '#28a745';
                 } else if (co2Value < 0.5) {
-                    trendElement.textContent = `🟡 Moderate (${vehicleCount} detected)`;
+                    trendElement.textContent = `Medium impact (${vehicleCount} detected)`;
                     trendElement.style.color = '#ffc107';
                 } else {
-                    trendElement.textContent = `🔴 High impact (${vehicleCount} detected)`;
+                    trendElement.textContent = `High impact (${vehicleCount} detected)`;
                     trendElement.style.color = '#dc3545';
                 }
             }
         }
     });
+
+    // Update progress bars with animation
+    updateProgressBars();
 }
 
 function updateEnvironmentalMetrics() {
@@ -1233,3 +1516,100 @@ function enhancedProcessDetectionResults(detections, isVideo = false) {
 
 // Replace the function
 window.processDetectionResults = enhancedProcessDetectionResults;
+
+// Enhanced Progress Bar Animation
+function updateProgressBars() {
+    // Calculate maximum values for scaling
+    const maxVehicles = Math.max(analytics.totalVehicles || 1, 10);
+    const maxPedestrians = Math.max(analytics.totalPedestrians || 1, 8);
+    const maxCyclists = Math.max(analytics.totalCyclists || 1, 5);
+    
+    // Update vehicles progress
+    const vehiclesProgress = document.querySelector('.vehicles-progress');
+    if (vehiclesProgress) {
+        const percentage = Math.min((analytics.totalVehicles / maxVehicles) * 100, 100);
+        vehiclesProgress.style.width = `${percentage}%`;
+    }
+    
+    // Update pedestrians progress
+    const pedestriansProgress = document.querySelector('.pedestrians-progress');
+    if (pedestriansProgress) {
+        const percentage = Math.min((analytics.totalPedestrians / maxPedestrians) * 100, 100);
+        pedestriansProgress.style.width = `${percentage}%`;
+    }
+    
+    // Update cyclists progress
+    const cyclistsProgress = document.querySelector('.cyclists-progress');
+    if (cyclistsProgress) {
+        const percentage = Math.min((analytics.totalCyclists / maxCyclists) * 100, 100);
+        cyclistsProgress.style.width = `${percentage}%`;
+    }
+    
+    // Accuracy progress is already set in HTML but can be updated
+    const accuracyProgress = document.querySelector('.accuracy-progress');
+    if (accuracyProgress) {
+        accuracyProgress.style.width = `${analytics.accuracyRate}%`;
+    }
+}
+
+// Enhanced Analytics Dashboard Update with Animations
+function updateEnhancedDashboard() {
+    // Trigger counter animations
+    animateCounters();
+    
+    // Update CO2 displays
+    updateVehicleCO2Displays();
+    
+    // Update environmental metrics
+    updateEnvironmentalMetrics();
+    
+    // Update recent detections
+    updateRecentDetections();
+}
+
+// Animated Counter Effect
+function animateCounters() {
+    const counters = [
+        { element: document.getElementById('total-vehicles'), target: analytics.totalVehicles },
+        { element: document.getElementById('total-pedestrians'), target: analytics.totalPedestrians },
+        { element: document.getElementById('total-cyclists'), target: analytics.totalCyclists }
+    ];
+    
+    counters.forEach(({ element, target }) => {
+        if (!element) return;
+        
+        const current = parseInt(element.textContent) || 0;
+        if (current === target) return;
+        
+        const duration = 1000; // 1 second
+        const startTime = Date.now();
+        const startValue = current;
+        
+        function updateCounter() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function for smooth animation
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const currentValue = Math.round(startValue + (target - startValue) * easeOut);
+            
+            element.textContent = currentValue;
+            
+            if (progress < 1) {
+                requestAnimationFrame(updateCounter);
+            }
+        }
+        
+        requestAnimationFrame(updateCounter);
+    });
+}
+
+// Override the main update function to use enhanced dashboard
+const originalUpdateAnalyticsDashboard = updateAnalyticsDashboard;
+window.updateAnalyticsDashboard = function() {
+    // Call original function for backward compatibility
+    originalUpdateAnalyticsDashboard.call(this);
+    
+    // Update enhanced dashboard
+    updateEnhancedDashboard();
+};
