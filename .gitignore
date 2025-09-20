@@ -1,0 +1,25 @@
+# Maven
+/target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# Compiled class files
+*.class
+
+# Others
+/.vscode/
+
+# Environment files
+.env
+
