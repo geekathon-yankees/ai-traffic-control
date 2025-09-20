@@ -1,0 +1,40 @@
+name: "Deploy Backend to AWS EC2"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+      - name: Ensure DEPLOY_PATH exists on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "mkdir -p /app/ml-gateway && chmod 755 /app/ml-gateway && chown ec2-user:ec2-user /app/ml-gateway || true"
+      - name: Copy backend files to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no -r ml-gateway/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }}:/app/ml-gateway/
+      - name: Install Python dependencies
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && python3 -m pip install --user -r requirements.txt"
+      - name: Stop existing backend process
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "pkill -f 'python3.*main.py' || echo 'No existing process found'"
+      - name: Start backend application
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /app/ml-gateway/app.log 2>&1 &"
+      - name: Verify backend deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "sleep 5 && ps aux | grep '[u]vicorn.*main:app' && echo 'Backend deployed successfully' || echo 'Backend deployment may have failed'"
+      - name: Show application logs
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "tail -20 /app/ml-gateway/app.log || echo 'Log file not found'"
