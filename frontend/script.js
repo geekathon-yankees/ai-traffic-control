@@ -10,7 +10,7 @@ const colors = [
     '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA'
 ];
 
-// Enhanced analytics tracking with CO2 emissions
+// Enhanced analytics tracking with CO2 emissions by vehicle type
 let analytics = {
     totalVehicles: 0,
     totalPedestrians: 0,
@@ -18,6 +18,12 @@ let analytics = {
     totalDetections: 0,
     accuracyRate: 95.2,
     totalCO2: 0, // Total CO2 emissions in kg/km
+    co2ByVehicleType: {
+        'car': 0,
+        'truck': 0, 
+        'bus': 0,
+        'motorcycle': 0
+    },
     recentDetections: [],
     entityCounts: {
         'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
@@ -42,6 +48,8 @@ const CO2_EMISSIONS = {
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
     setupEventListeners();
+    loadPersistedData();
+    startPerformanceMonitoring();
     animateStats();
 });
 
@@ -64,6 +72,12 @@ function setupEventListeners() {
     
     // Play detections button
     document.getElementById('play-detections').addEventListener('click', playVideoDetections);
+    
+    // Reset analytics button
+    document.getElementById('reset-analytics').addEventListener('click', resetAnalytics);
+    
+    // Export analytics button
+    document.getElementById('export-analytics').addEventListener('click', exportAnalytics);
 }
 
 function setupDragAndDrop(elementId, handler) {
@@ -374,7 +388,7 @@ async function displayVideoResults(file, result) {
     document.getElementById('video-results').scrollIntoView({ behavior: 'smooth' });
 }
 
-// Draw Bounding Boxes
+// Draw Bounding Boxes with Improved Label Positioning
 function drawBoundingBoxes(ctx, detections, canvasWidth, canvasHeight, originalWidth, originalHeight) {
     if (!detections || detections.length === 0) {
         console.log('🔍 No detections to draw');
@@ -391,6 +405,9 @@ function drawBoundingBoxes(ctx, detections, canvasWidth, canvasHeight, originalW
         originalSize: { width: originalWidth, height: originalHeight },
         scales: { x: scaleX, y: scaleY }
     });
+    
+    // Store label positions to prevent overlaps
+    const usedLabelPositions = [];
     
     detections.forEach((detection, index) => {
         const { bbox, label, score } = detection;
@@ -409,55 +426,234 @@ function drawBoundingBoxes(ctx, detections, canvasWidth, canvasHeight, originalW
         
         // Scale bounding box coordinates
         const scaledBbox = {
-            x1: bbox.x1 * scaleX,
-            y1: bbox.y1 * scaleY,
-            x2: bbox.x2 * scaleX,
-            y2: bbox.y2 * scaleY
+            x1: Math.max(0, bbox.x1 * scaleX),
+            y1: Math.max(0, bbox.y1 * scaleY),
+            x2: Math.min(canvasWidth, bbox.x2 * scaleX),
+            y2: Math.min(canvasHeight, bbox.y2 * scaleY)
         };
         
-        // Set drawing style
+        // Enhanced label styling
         ctx.strokeStyle = color;
         ctx.fillStyle = color;
         ctx.lineWidth = 3;
         ctx.font = 'bold 14px Inter';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
         
-        // Draw bounding box
+        // Draw bounding box with rounded corners effect
         const width = scaledBbox.x2 - scaledBbox.x1;
         const height = scaledBbox.y2 - scaledBbox.y1;
+        
+        // Draw main rectangle
         ctx.strokeRect(scaledBbox.x1, scaledBbox.y1, width, height);
         
-        // Draw label background
+        // Add corner accents for better visibility
+        ctx.lineWidth = 4;
+        const cornerSize = Math.min(15, width * 0.1, height * 0.1);
+        
+        // Top-left corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x1, scaledBbox.y1 + cornerSize);
+        ctx.lineTo(scaledBbox.x1, scaledBbox.y1);
+        ctx.lineTo(scaledBbox.x1 + cornerSize, scaledBbox.y1);
+        ctx.stroke();
+        
+        // Top-right corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x2 - cornerSize, scaledBbox.y1);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y1);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y1 + cornerSize);
+        ctx.stroke();
+        
+        // Bottom-left corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x1, scaledBbox.y2 - cornerSize);
+        ctx.lineTo(scaledBbox.x1, scaledBbox.y2);
+        ctx.lineTo(scaledBbox.x1 + cornerSize, scaledBbox.y2);
+        ctx.stroke();
+        
+        // Bottom-right corner
+        ctx.beginPath();
+        ctx.moveTo(scaledBbox.x2 - cornerSize, scaledBbox.y2);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y2);
+        ctx.lineTo(scaledBbox.x2, scaledBbox.y2 - cornerSize);
+        ctx.stroke();
+        
+        // Reset shadow for label drawing
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        
+        // Enhanced label positioning
         const labelText = `${label} ${Math.round((score || 0) * 100)}%`;
         const metrics = ctx.measureText(labelText);
-        const labelPadding = 6;
-        const labelHeight = 20;
+        const labelPadding = 8;
+        const labelHeight = 22;
+        const labelWidth = metrics.width + labelPadding * 2;
         
-        // Ensure label stays within canvas bounds
-        const labelY = Math.max(labelHeight + labelPadding, scaledBbox.y1);
-        
-        ctx.fillRect(
-            scaledBbox.x1, 
-            labelY - labelHeight - labelPadding,
-            metrics.width + labelPadding * 2,
-            labelHeight + labelPadding
+        // Calculate optimal label position
+        const labelPos = calculateOptimalLabelPosition(
+            scaledBbox, 
+            labelWidth, 
+            labelHeight + labelPadding, 
+            canvasWidth, 
+            canvasHeight,
+            usedLabelPositions
         );
         
-        // Draw label text
-        ctx.fillStyle = 'white';
+        // Draw label with improved styling
+        const gradient = ctx.createLinearGradient(0, labelPos.y - labelHeight, 0, labelPos.y);
+        gradient.addColorStop(0, color);
+        gradient.addColorStop(1, adjustColorBrightness(color, -0.2));
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+        
+        // Add label border for better definition
+        ctx.strokeStyle = adjustColorBrightness(color, -0.3);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+        
+        // Draw label text with better contrast
+        ctx.fillStyle = getContrastColor(color);
+        ctx.font = 'bold 13px Inter';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        
+        // Add text shadow for better readability
+        ctx.shadowColor = color === '#FFFFFF' || isLightColor(color) ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        
         ctx.fillText(
             labelText, 
-            scaledBbox.x1 + labelPadding, 
-            labelY - labelPadding
+            labelPos.x + labelPadding, 
+            labelPos.y - labelHeight / 2
         );
+        
+        // Reset text shadow
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        
+        // Store this label position to prevent overlaps
+        usedLabelPositions.push({
+            x: labelPos.x,
+            y: labelPos.y - labelHeight,
+            width: labelWidth,
+            height: labelHeight
+        });
         
         console.log('🎯 Drew detection:', {
             label,
             score: Math.round((score || 0) * 100),
             originalBbox: bbox,
             scaledBbox,
+            labelPos,
             color
         });
     });
+}
+
+// Helper function to calculate optimal label position
+function calculateOptimalLabelPosition(bbox, labelWidth, labelHeight, canvasWidth, canvasHeight, usedPositions) {
+    const margin = 4;
+    
+    // Preferred positions in order of preference
+    const positions = [
+        // Above the box (preferred)
+        { x: bbox.x1, y: bbox.y1 - margin },
+        // Below the box
+        { x: bbox.x1, y: bbox.y2 + labelHeight + margin },
+        // Inside top
+        { x: bbox.x1 + margin, y: bbox.y1 + labelHeight + margin },
+        // Inside bottom
+        { x: bbox.x1 + margin, y: bbox.y2 - margin },
+        // Right side
+        { x: bbox.x2 + margin, y: bbox.y1 + labelHeight },
+        // Left side
+        { x: bbox.x1 - labelWidth - margin, y: bbox.y1 + labelHeight }
+    ];
+    
+    for (const pos of positions) {
+        // Adjust position to stay within canvas bounds
+        const adjustedPos = {
+            x: Math.max(0, Math.min(pos.x, canvasWidth - labelWidth)),
+            y: Math.max(labelHeight, Math.min(pos.y, canvasHeight))
+        };
+        
+        // Check if this position overlaps with existing labels
+        if (!overlapsWithExistingLabels(adjustedPos, labelWidth, labelHeight, usedPositions)) {
+            return adjustedPos;
+        }
+    }
+    
+    // If no non-overlapping position found, use the first adjusted position
+    return {
+        x: Math.max(0, Math.min(positions[0].x, canvasWidth - labelWidth)),
+        y: Math.max(labelHeight, Math.min(positions[0].y, canvasHeight))
+    };
+}
+
+// Helper function to check label overlaps
+function overlapsWithExistingLabels(pos, width, height, usedPositions) {
+    const testRect = {
+        x: pos.x,
+        y: pos.y - height,
+        width: width,
+        height: height
+    };
+    
+    return usedPositions.some(usedPos => {
+        return !(testRect.x + testRect.width < usedPos.x ||
+                usedPos.x + usedPos.width < testRect.x ||
+                testRect.y + testRect.height < usedPos.y ||
+                usedPos.y + usedPos.height < testRect.y);
+    });
+}
+
+// Helper function to adjust color brightness
+function adjustColorBrightness(color, percent) {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent * 100);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+        (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+}
+
+// Helper function to get contrasting text color
+function getContrastColor(hexColor) {
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return white for dark backgrounds, black for light backgrounds
+    return luminance > 0.5 ? '#000000' : '#FFFFFF';
+}
+
+// Helper function to check if color is light
+function isLightColor(hexColor) {
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5;
 }
 
 // Display Detection List
@@ -528,14 +724,284 @@ function displayVideoTimeline(result) {
         </div>` : '');
 }
 
-// Play Video Detections (placeholder for future enhancement)
+// Play Video Detections with real-time overlay
 function playVideoDetections() {
     if (!currentVideoData) {
         showNotification('No video data available', 'error');
         return;
     }
     
-    showNotification('Video detection playback feature coming soon!', 'info');
+    const video = document.getElementById('preview-video');
+    const playBtn = document.getElementById('play-detections');
+    
+    if (!video || !video.src) {
+        showNotification('No video loaded', 'error');
+        return;
+    }
+    
+    // Create or get existing canvas overlay
+    let canvas = document.getElementById('detection-overlay');
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'detection-overlay';
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.pointerEvents = 'none';
+        canvas.style.zIndex = '10';
+        
+        // Make video container relative positioned
+        const videoContainer = video.parentElement;
+        if (videoContainer.style.position !== 'relative') {
+            videoContainer.style.position = 'relative';
+        }
+        videoContainer.appendChild(canvas);
+    }
+    
+    const ctx = canvas.getContext('2d');
+    let animationFrame = null;
+    let isPlaying = false;
+    
+    // Set canvas size to match video
+    const resizeCanvas = () => {
+        canvas.width = video.videoWidth || video.offsetWidth;
+        canvas.height = video.videoHeight || video.offsetHeight;
+        canvas.style.width = video.offsetWidth + 'px';
+        canvas.style.height = video.offsetHeight + 'px';
+    };
+    
+    // Draw detections for current video time
+    const drawDetections = () => {
+        if (!isPlaying) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const currentTime = video.currentTime;
+        const fps = currentVideoData.fps_sample || 1;
+        
+        // Find the closest detection frame
+        let closestFrame = null;
+        let minTimeDiff = Infinity;
+        
+        currentVideoData.results.forEach(frame => {
+            const timeDiff = Math.abs(frame.time_sec - currentTime);
+            if (timeDiff < minTimeDiff) {
+                minTimeDiff = timeDiff;
+                closestFrame = frame;
+            }
+        });
+        
+        // Draw detections if we have a close frame (within 0.5 seconds)
+        if (closestFrame && minTimeDiff < 0.5) {
+            const scaleX = canvas.width / video.videoWidth;
+            const scaleY = canvas.height / video.videoHeight;
+            
+            // Store label positions to prevent overlaps in video overlay
+            const usedVideoLabelPositions = [];
+            
+            closestFrame.detections.forEach((detection, index) => {
+                const { bbox, label, score } = detection;
+                
+                // Get color for this label
+                if (!detectionColors[label]) {
+                    detectionColors[label] = colors[colorIndex % colors.length];
+                    colorIndex++;
+                }
+                const color = detectionColors[label];
+                
+                // Scale and clamp bounding box coordinates
+                const scaledBbox = {
+                    x1: Math.max(0, bbox.x1 * scaleX),
+                    y1: Math.max(0, bbox.y1 * scaleY),
+                    x2: Math.min(canvas.width, bbox.x2 * scaleX),
+                    y2: Math.min(canvas.height, bbox.y2 * scaleY)
+                };
+                
+                const width = scaledBbox.x2 - scaledBbox.x1;
+                const height = scaledBbox.y2 - scaledBbox.y1;
+                
+                // Enhanced bounding box drawing with shadow
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 3;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(scaledBbox.x1, scaledBbox.y1, width, height);
+                
+                // Add corner accents for video overlay
+                ctx.lineWidth = 4;
+                const cornerSize = Math.min(12, width * 0.08, height * 0.08);
+                
+                // Draw corner accents
+                const corners = [
+                    [[scaledBbox.x1, scaledBbox.y1 + cornerSize], [scaledBbox.x1, scaledBbox.y1], [scaledBbox.x1 + cornerSize, scaledBbox.y1]],
+                    [[scaledBbox.x2 - cornerSize, scaledBbox.y1], [scaledBbox.x2, scaledBbox.y1], [scaledBbox.x2, scaledBbox.y1 + cornerSize]],
+                    [[scaledBbox.x1, scaledBbox.y2 - cornerSize], [scaledBbox.x1, scaledBbox.y2], [scaledBbox.x1 + cornerSize, scaledBbox.y2]],
+                    [[scaledBbox.x2 - cornerSize, scaledBbox.y2], [scaledBbox.x2, scaledBbox.y2], [scaledBbox.x2, scaledBbox.y2 - cornerSize]]
+                ];
+                
+                corners.forEach(corner => {
+                    ctx.beginPath();
+                    ctx.moveTo(corner[0][0], corner[0][1]);
+                    ctx.lineTo(corner[1][0], corner[1][1]);
+                    ctx.lineTo(corner[2][0], corner[2][1]);
+                    ctx.stroke();
+                });
+                
+                // Reset shadow for label drawing
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // Enhanced video label positioning
+                const labelText = `${label} ${Math.round((score || 0) * 100)}%`;
+                ctx.font = 'bold 15px Inter';
+                const metrics = ctx.measureText(labelText);
+                const labelPadding = 8;
+                const labelHeight = 24;
+                const labelWidth = metrics.width + labelPadding * 2;
+                
+                // Calculate optimal label position for video
+                const labelPos = calculateOptimalLabelPosition(
+                    scaledBbox, 
+                    labelWidth, 
+                    labelHeight, 
+                    canvas.width, 
+                    canvas.height,
+                    usedVideoLabelPositions
+                );
+                
+                // Draw enhanced label background with gradient
+                const gradient = ctx.createLinearGradient(0, labelPos.y - labelHeight, 0, labelPos.y);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, adjustColorBrightness(color, -0.3));
+                
+                // Add subtle shadow to label for better video visibility
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+                
+                // Add label border
+                ctx.strokeStyle = adjustColorBrightness(color, -0.4);
+                ctx.lineWidth = 2;
+                ctx.strokeRect(labelPos.x, labelPos.y - labelHeight, labelWidth, labelHeight);
+                
+                // Reset shadow for text
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // Draw label text with enhanced readability for video
+                ctx.fillStyle = getContrastColor(color);
+                ctx.font = 'bold 14px Inter';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                
+                // Add strong text shadow for video readability
+                ctx.shadowColor = isLightColor(color) ? 'rgba(0, 0, 0, 1)' : 'rgba(255, 255, 255, 1)';
+                ctx.shadowBlur = 3;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+                
+                ctx.fillText(
+                    labelText, 
+                    labelPos.x + labelPadding, 
+                    labelPos.y - labelHeight / 2
+                );
+                
+                // Reset all shadows
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // Store this label position to prevent overlaps
+                usedVideoLabelPositions.push({
+                    x: labelPos.x,
+                    y: labelPos.y - labelHeight,
+                    width: labelWidth,
+                    height: labelHeight
+                });
+            });
+            
+            // Show frame info
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, 10, 300, 50);
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Inter';
+            ctx.fillText(`Frame: ${closestFrame.frame_index}/${currentVideoData.total_frames}`, 20, 30);
+            ctx.fillText(`Time: ${currentTime.toFixed(1)}s | Detections: ${closestFrame.detections.length}`, 20, 50);
+        }
+        
+        if (isPlaying && !video.paused) {
+            animationFrame = requestAnimationFrame(drawDetections);
+        }
+    };
+    
+    // Check if overlay is currently active
+    const isCurrentlyActive = playBtn.dataset.active === 'true';
+    
+    // Toggle playback
+    if (isCurrentlyActive) {
+        // Stop detection overlay
+        isPlaying = false;
+        playBtn.dataset.active = 'false';
+        if (animationFrame) {
+            cancelAnimationFrame(animationFrame);
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'none';
+        playBtn.innerHTML = '<i class="fas fa-play"></i> Play with Detections';
+        playBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+        
+        showNotification('Detection overlay stopped', 'info');
+    } else {
+        // Start detection overlay
+        isPlaying = true;
+        playBtn.dataset.active = 'true';
+        canvas.style.display = 'block';
+        resizeCanvas();
+        
+        // Update button
+        playBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Detections';
+        playBtn.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+        
+        // Setup video event listeners
+        video.addEventListener('loadedmetadata', resizeCanvas);
+        video.addEventListener('resize', resizeCanvas);
+        
+        // Start drawing loop
+        drawDetections();
+        
+        // Continue drawing while video plays
+        video.addEventListener('play', () => {
+            if (isPlaying) drawDetections();
+        });
+        
+        video.addEventListener('pause', () => {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+        });
+        
+        video.addEventListener('ended', () => {
+            isPlaying = false;
+            playBtn.dataset.active = 'false';
+            canvas.style.display = 'none';
+            playBtn.innerHTML = '<i class="fas fa-play"></i> Play with Detections';
+            playBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+        });
+        
+        showNotification('Detection overlay activated! Play the video to see detections.', 'success');
+    }
 }
 
 // Utility Functions
@@ -677,31 +1143,53 @@ function updateAnalyticsDashboard() {
     document.getElementById('total-cyclists').textContent = analytics.totalCyclists;
     document.getElementById('accuracy-rate').textContent = `${analytics.accuracyRate.toFixed(1)}%`;
     
-    // Update CO2 metrics
-    const co2Element = document.getElementById('total-co2');
-    const co2TrendElement = document.getElementById('co2-trend');
-    
-    if (co2Element && co2TrendElement) {
-        co2Element.textContent = `${(analytics.totalCO2 * 1000).toFixed(1)}g`;
-        
-        // Update CO2 trend based on emissions level
-        if (analytics.totalCO2 < 0.1) {
-            co2TrendElement.textContent = '🌱 Excellent - Low Impact';
-            co2TrendElement.style.color = '#28a745';
-        } else if (analytics.totalCO2 < 0.5) {
-            co2TrendElement.textContent = '🟡 Moderate Impact';
-            co2TrendElement.style.color = '#ffc107';
-        } else {
-            co2TrendElement.textContent = '🔴 High Impact - Consider Green Transport';
-            co2TrendElement.style.color = '#dc3545';
-        }
-    }
+    // Update CO2 metrics by vehicle type
+    updateVehicleCO2Displays();
     
     // Update environmental metrics
     updateEnvironmentalMetrics();
     
     // Update recent detections
     updateRecentDetections();
+}
+
+function updateVehicleCO2Displays() {
+    // Update individual vehicle CO2 displays
+    const vehicleTypes = ['car', 'truck', 'bus'];
+
+    vehicleTypes.forEach(vehicleType => {
+        const co2Element = document.getElementById(`co2-${vehicleType}`);
+        const trendElement = document.getElementById(`co2-${vehicleType}-trend`);
+
+        if (co2Element) {
+            const co2Value = analytics.co2ByVehicleType[vehicleType];
+            const co2InGrams = (co2Value * 1000).toFixed(0);
+            co2Element.textContent = `${co2InGrams}g`;
+
+            // Update trend color and message based on emissions level
+            if (trendElement) {
+                const vehicleCount = analytics.entityCounts[vehicleType];
+                const emissionRate = CO2_EMISSIONS[vehicleType] * 1000; // Convert to grams
+
+                if (vehicleCount === 0) {
+                    trendElement.textContent = `${emissionRate}g baseline`;
+                    trendElement.style.color = '#6c757d'; // Gray for no detections
+                } else if (co2Value < 0.1) {
+                    trendElement.textContent = `Low impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#28a745';
+                } else if (co2Value < 0.5) {
+                    trendElement.textContent = `Medium impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#ffc107';
+                } else {
+                    trendElement.textContent = `High impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#dc3545';
+                }
+            }
+        }
+    });
+
+    // Update progress bars with animation
+    updateProgressBars();
 }
 
 function updateEnvironmentalMetrics() {
@@ -759,13 +1247,29 @@ function updateRecentDetections() {
     
     // Add demo data if no real data exists
     if (analytics.recentDetections.length === 0) {
+        // Add some demo CO₂ data for each vehicle type
+        analytics.co2ByVehicleType.car = 0.24; // 2 cars
+        analytics.co2ByVehicleType.truck = 0.85; // 1 truck
+        analytics.co2ByVehicleType.bus = 1.28; // 2 buses
+        analytics.entityCounts.car = 2;
+        analytics.entityCounts.truck = 1;
+        analytics.entityCounts.bus = 2;
+        analytics.entityCounts.person = 3;
+        analytics.entityCounts.bicycle = 1;
+        analytics.totalVehicles = 5;
+        analytics.totalPedestrians = 3;
+        analytics.totalCyclists = 1;
+        
         analytics.recentDetections = [
-            { type: 'Vehicle (Car) (120g CO₂/km)', time: '2 min ago' },
+            { type: 'Car (120g CO₂/km)', time: '2 min ago' },
             { type: 'Pedestrian (0g CO₂/km)', time: '3 min ago' },
-            { type: 'Vehicle (Truck) (850g CO₂/km)', time: '5 min ago' },
+            { type: 'Truck (850g CO₂/km)', time: '5 min ago' },
             { type: 'Bicycle (0g CO₂/km)', time: '7 min ago' },
-            { type: 'Vehicle (Bus) (640g CO₂/km)', time: '12 min ago' }
+            { type: 'Bus (640g CO₂/km)', time: '12 min ago' }
         ];
+        
+        // Update the displays with demo data
+        updateVehicleCO2Displays();
     }
     
     recentList.innerHTML = analytics.recentDetections.map(detection => `
@@ -795,6 +1299,11 @@ function processDetectionResults(detections, isVideo = false) {
             const co2ForVehicle = CO2_EMISSIONS[label];
             analytics.totalCO2 += co2ForVehicle;
             sessionCO2 += co2ForVehicle;
+            
+            // Track CO2 by vehicle type
+            if (analytics.co2ByVehicleType.hasOwnProperty(label)) {
+                analytics.co2ByVehicleType[label] += co2ForVehicle;
+            }
         }
         
         // Categorize detections
@@ -859,3 +1368,248 @@ function initializeApp() {
         });
     });
 }
+
+// Enhanced functionality for data management and performance monitoring
+
+function resetAnalytics() {
+    if (confirm('Are you sure you want to reset all analytics data? This cannot be undone.')) {
+        // Reset analytics object
+        analytics = {
+            totalVehicles: 0,
+            totalPedestrians: 0,
+            totalCyclists: 0,
+            totalDetections: 0,
+            accuracyRate: 95.2,
+            totalCO2: 0,
+            co2ByVehicleType: {
+                'car': 0,
+                'truck': 0, 
+                'bus': 0,
+                'motorcycle': 0
+            },
+            recentDetections: [],
+            entityCounts: {
+                'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
+                'person': 0, 'bicycle': 0, 'traffic light': 0, 'stop sign': 0
+            }
+        };
+        
+        // Clear localStorage
+        localStorage.removeItem('trafficAnalytics');
+        
+        // Update displays
+        updateAnalyticsDashboard();
+        
+        // Hide results
+        document.getElementById('image-results').style.display = 'none';
+        document.getElementById('video-results').style.display = 'none';
+        
+        showNotification('Analytics data has been reset successfully!', 'success');
+    }
+}
+
+function exportAnalytics() {
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        analytics: analytics,
+        performance: {
+            export_time: new Date().toISOString(),
+            session_duration: Date.now() - performanceMonitor.sessionStart
+        }
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `traffic-analytics-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    URL.revokeObjectURL(url);
+    showNotification('Analytics data exported successfully!', 'success');
+}
+
+function loadPersistedData() {
+    try {
+        const saved = localStorage.getItem('trafficAnalytics');
+        if (saved) {
+            const data = JSON.parse(saved);
+            Object.assign(analytics, data);
+            console.log('📊 Loaded persisted analytics data');
+        }
+    } catch (error) {
+        console.warn('⚠️ Could not load persisted data:', error);
+    }
+}
+
+function saveAnalyticsData() {
+    try {
+        localStorage.setItem('trafficAnalytics', JSON.stringify(analytics));
+    } catch (error) {
+        console.warn('⚠️ Could not save analytics data:', error);
+    }
+}
+
+// Performance monitoring
+const performanceMonitor = {
+    sessionStart: Date.now(),
+    requestTimes: [],
+    lastMetricsUpdate: 0
+};
+
+function startPerformanceMonitoring() {
+    // Update performance metrics every 5 seconds
+    setInterval(updatePerformanceMetrics, 5000);
+    
+    // Initial update
+    updatePerformanceMetrics();
+}
+
+async function updatePerformanceMetrics() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/metrics`);
+        if (response.ok) {
+            const metrics = await response.json();
+            
+            document.getElementById('api-response-time').textContent = 
+                metrics.avg_response_time_ms ? `${metrics.avg_response_time_ms}ms` : '-';
+            
+            document.getElementById('total-requests').textContent = 
+                metrics.total_requests || '0';
+            
+            document.getElementById('requests-per-min').textContent = 
+                metrics.requests_per_minute ? metrics.requests_per_minute.toFixed(1) : '0';
+            
+            document.getElementById('system-uptime').textContent = 
+                formatUptime(metrics.uptime_seconds || 0);
+            
+        }
+    } catch (error) {
+        console.warn('Could not fetch performance metrics:', error);
+        document.getElementById('api-response-time').textContent = 'Error';
+    }
+}
+
+function formatUptime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
+}
+
+// Enhanced processDetectionResults to auto-save data
+const originalProcessDetectionResults = processDetectionResults;
+function enhancedProcessDetectionResults(detections, isVideo = false) {
+    originalProcessDetectionResults.call(this, detections, isVideo);
+    saveAnalyticsData(); // Auto-save after processing results
+}
+
+// Replace the function
+window.processDetectionResults = enhancedProcessDetectionResults;
+
+// Enhanced Progress Bar Animation
+function updateProgressBars() {
+    // Calculate maximum values for scaling
+    const maxVehicles = Math.max(analytics.totalVehicles || 1, 10);
+    const maxPedestrians = Math.max(analytics.totalPedestrians || 1, 8);
+    const maxCyclists = Math.max(analytics.totalCyclists || 1, 5);
+    
+    // Update vehicles progress
+    const vehiclesProgress = document.querySelector('.vehicles-progress');
+    if (vehiclesProgress) {
+        const percentage = Math.min((analytics.totalVehicles / maxVehicles) * 100, 100);
+        vehiclesProgress.style.width = `${percentage}%`;
+    }
+    
+    // Update pedestrians progress
+    const pedestriansProgress = document.querySelector('.pedestrians-progress');
+    if (pedestriansProgress) {
+        const percentage = Math.min((analytics.totalPedestrians / maxPedestrians) * 100, 100);
+        pedestriansProgress.style.width = `${percentage}%`;
+    }
+    
+    // Update cyclists progress
+    const cyclistsProgress = document.querySelector('.cyclists-progress');
+    if (cyclistsProgress) {
+        const percentage = Math.min((analytics.totalCyclists / maxCyclists) * 100, 100);
+        cyclistsProgress.style.width = `${percentage}%`;
+    }
+    
+    // Accuracy progress is already set in HTML but can be updated
+    const accuracyProgress = document.querySelector('.accuracy-progress');
+    if (accuracyProgress) {
+        accuracyProgress.style.width = `${analytics.accuracyRate}%`;
+    }
+}
+
+// Enhanced Analytics Dashboard Update with Animations
+function updateEnhancedDashboard() {
+    // Trigger counter animations
+    animateCounters();
+    
+    // Update CO2 displays
+    updateVehicleCO2Displays();
+    
+    // Update environmental metrics
+    updateEnvironmentalMetrics();
+    
+    // Update recent detections
+    updateRecentDetections();
+}
+
+// Animated Counter Effect
+function animateCounters() {
+    const counters = [
+        { element: document.getElementById('total-vehicles'), target: analytics.totalVehicles },
+        { element: document.getElementById('total-pedestrians'), target: analytics.totalPedestrians },
+        { element: document.getElementById('total-cyclists'), target: analytics.totalCyclists }
+    ];
+    
+    counters.forEach(({ element, target }) => {
+        if (!element) return;
+        
+        const current = parseInt(element.textContent) || 0;
+        if (current === target) return;
+        
+        const duration = 1000; // 1 second
+        const startTime = Date.now();
+        const startValue = current;
+        
+        function updateCounter() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function for smooth animation
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const currentValue = Math.round(startValue + (target - startValue) * easeOut);
+            
+            element.textContent = currentValue;
+            
+            if (progress < 1) {
+                requestAnimationFrame(updateCounter);
+            }
+        }
+        
+        requestAnimationFrame(updateCounter);
+    });
+}
+
+// Override the main update function to use enhanced dashboard
+const originalUpdateAnalyticsDashboard = updateAnalyticsDashboard;
+window.updateAnalyticsDashboard = function() {
+    // Call original function for backward compatibility
+    originalUpdateAnalyticsDashboard.call(this);
+    
+    // Update enhanced dashboard
+    updateEnhancedDashboard();
+};
