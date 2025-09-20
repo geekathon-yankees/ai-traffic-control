@@ -38,7 +38,10 @@ jobs:
           fi"
       - name: Install Python dependencies on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app/ml-gateway && python3 -m pip install --user -r requirements.txt"
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app/ml-gateway && nohup python3 -m pip install --user -r requirements.txt > /app/ml-gateway/pip_install.log 2>&1 &"
+      - name: Show last 40 lines of pip install log
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -40 /app/ml-gateway/pip_install.log || echo 'pip_install.log not found.'"
       - name: Restart Python app on EC2
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'python3 main.py' || true && cd /app/ml-gateway && nohup python3 main.py > /app/ml-gateway/app.log 2>&1 &"
