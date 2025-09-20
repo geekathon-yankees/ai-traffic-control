@@ -10,7 +10,7 @@ const colors = [
     '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA'
 ];
 
-// Enhanced analytics tracking with CO2 emissions
+// Enhanced analytics tracking with CO2 emissions by vehicle type
 let analytics = {
     totalVehicles: 0,
     totalPedestrians: 0,
@@ -18,6 +18,12 @@ let analytics = {
     totalDetections: 0,
     accuracyRate: 95.2,
     totalCO2: 0, // Total CO2 emissions in kg/km
+    co2ByVehicleType: {
+        'car': 0,
+        'truck': 0, 
+        'bus': 0,
+        'motorcycle': 0
+    },
     recentDetections: [],
     entityCounts: {
         'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
@@ -42,6 +48,8 @@ const CO2_EMISSIONS = {
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
     setupEventListeners();
+    loadPersistedData();
+    startPerformanceMonitoring();
     animateStats();
 });
 
@@ -64,6 +72,12 @@ function setupEventListeners() {
     
     // Play detections button
     document.getElementById('play-detections').addEventListener('click', playVideoDetections);
+    
+    // Reset analytics button
+    document.getElementById('reset-analytics').addEventListener('click', resetAnalytics);
+    
+    // Export analytics button
+    document.getElementById('export-analytics').addEventListener('click', exportAnalytics);
 }
 
 function setupDragAndDrop(elementId, handler) {
@@ -677,31 +691,50 @@ function updateAnalyticsDashboard() {
     document.getElementById('total-cyclists').textContent = analytics.totalCyclists;
     document.getElementById('accuracy-rate').textContent = `${analytics.accuracyRate.toFixed(1)}%`;
     
-    // Update CO2 metrics
-    const co2Element = document.getElementById('total-co2');
-    const co2TrendElement = document.getElementById('co2-trend');
-    
-    if (co2Element && co2TrendElement) {
-        co2Element.textContent = `${(analytics.totalCO2 * 1000).toFixed(1)}g`;
-        
-        // Update CO2 trend based on emissions level
-        if (analytics.totalCO2 < 0.1) {
-            co2TrendElement.textContent = '🌱 Excellent - Low Impact';
-            co2TrendElement.style.color = '#28a745';
-        } else if (analytics.totalCO2 < 0.5) {
-            co2TrendElement.textContent = '🟡 Moderate Impact';
-            co2TrendElement.style.color = '#ffc107';
-        } else {
-            co2TrendElement.textContent = '🔴 High Impact - Consider Green Transport';
-            co2TrendElement.style.color = '#dc3545';
-        }
-    }
+    // Update CO2 metrics by vehicle type
+    updateVehicleCO2Displays();
     
     // Update environmental metrics
     updateEnvironmentalMetrics();
     
     // Update recent detections
     updateRecentDetections();
+}
+
+function updateVehicleCO2Displays() {
+    // Update individual vehicle CO2 displays
+    const vehicleTypes = ['car', 'truck', 'bus'];
+    
+    vehicleTypes.forEach(vehicleType => {
+        const co2Element = document.getElementById(`co2-${vehicleType}`);
+        const trendElement = document.getElementById(`co2-${vehicleType}-trend`);
+        
+        if (co2Element) {
+            const co2Value = analytics.co2ByVehicleType[vehicleType];
+            const co2InGrams = (co2Value * 1000).toFixed(0);
+            co2Element.textContent = `${co2InGrams}g`;
+            
+            // Update trend color and message based on emissions level
+            if (trendElement) {
+                const vehicleCount = analytics.entityCounts[vehicleType];
+                const emissionRate = CO2_EMISSIONS[vehicleType] * 1000; // Convert to grams
+                
+                if (vehicleCount === 0) {
+                    trendElement.textContent = `${emissionRate}g per ${vehicleType}`;
+                    trendElement.style.color = '#6c757d'; // Gray for no detections
+                } else if (co2Value < 0.1) {
+                    trendElement.textContent = `🌱 Low impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#28a745';
+                } else if (co2Value < 0.5) {
+                    trendElement.textContent = `🟡 Moderate (${vehicleCount} detected)`;
+                    trendElement.style.color = '#ffc107';
+                } else {
+                    trendElement.textContent = `🔴 High impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#dc3545';
+                }
+            }
+        }
+    });
 }
 
 function updateEnvironmentalMetrics() {
@@ -759,13 +792,29 @@ function updateRecentDetections() {
     
     // Add demo data if no real data exists
     if (analytics.recentDetections.length === 0) {
+        // Add some demo CO₂ data for each vehicle type
+        analytics.co2ByVehicleType.car = 0.24; // 2 cars
+        analytics.co2ByVehicleType.truck = 0.85; // 1 truck
+        analytics.co2ByVehicleType.bus = 1.28; // 2 buses
+        analytics.entityCounts.car = 2;
+        analytics.entityCounts.truck = 1;
+        analytics.entityCounts.bus = 2;
+        analytics.entityCounts.person = 3;
+        analytics.entityCounts.bicycle = 1;
+        analytics.totalVehicles = 5;
+        analytics.totalPedestrians = 3;
+        analytics.totalCyclists = 1;
+        
         analytics.recentDetections = [
-            { type: 'Vehicle (Car) (120g CO₂/km)', time: '2 min ago' },
+            { type: 'Car (120g CO₂/km)', time: '2 min ago' },
             { type: 'Pedestrian (0g CO₂/km)', time: '3 min ago' },
-            { type: 'Vehicle (Truck) (850g CO₂/km)', time: '5 min ago' },
+            { type: 'Truck (850g CO₂/km)', time: '5 min ago' },
             { type: 'Bicycle (0g CO₂/km)', time: '7 min ago' },
-            { type: 'Vehicle (Bus) (640g CO₂/km)', time: '12 min ago' }
+            { type: 'Bus (640g CO₂/km)', time: '12 min ago' }
         ];
+        
+        // Update the displays with demo data
+        updateVehicleCO2Displays();
     }
     
     recentList.innerHTML = analytics.recentDetections.map(detection => `
@@ -795,6 +844,11 @@ function processDetectionResults(detections, isVideo = false) {
             const co2ForVehicle = CO2_EMISSIONS[label];
             analytics.totalCO2 += co2ForVehicle;
             sessionCO2 += co2ForVehicle;
+            
+            // Track CO2 by vehicle type
+            if (analytics.co2ByVehicleType.hasOwnProperty(label)) {
+                analytics.co2ByVehicleType[label] += co2ForVehicle;
+            }
         }
         
         // Categorize detections
@@ -859,3 +913,151 @@ function initializeApp() {
         });
     });
 }
+
+// Enhanced functionality for data management and performance monitoring
+
+function resetAnalytics() {
+    if (confirm('Are you sure you want to reset all analytics data? This cannot be undone.')) {
+        // Reset analytics object
+        analytics = {
+            totalVehicles: 0,
+            totalPedestrians: 0,
+            totalCyclists: 0,
+            totalDetections: 0,
+            accuracyRate: 95.2,
+            totalCO2: 0,
+            co2ByVehicleType: {
+                'car': 0,
+                'truck': 0, 
+                'bus': 0,
+                'motorcycle': 0
+            },
+            recentDetections: [],
+            entityCounts: {
+                'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
+                'person': 0, 'bicycle': 0, 'traffic light': 0, 'stop sign': 0
+            }
+        };
+        
+        // Clear localStorage
+        localStorage.removeItem('trafficAnalytics');
+        
+        // Update displays
+        updateAnalyticsDashboard();
+        
+        // Hide results
+        document.getElementById('image-results').style.display = 'none';
+        document.getElementById('video-results').style.display = 'none';
+        
+        showNotification('Analytics data has been reset successfully!', 'success');
+    }
+}
+
+function exportAnalytics() {
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        analytics: analytics,
+        performance: {
+            export_time: new Date().toISOString(),
+            session_duration: Date.now() - performanceMonitor.sessionStart
+        }
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `traffic-analytics-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    URL.revokeObjectURL(url);
+    showNotification('Analytics data exported successfully!', 'success');
+}
+
+function loadPersistedData() {
+    try {
+        const saved = localStorage.getItem('trafficAnalytics');
+        if (saved) {
+            const data = JSON.parse(saved);
+            Object.assign(analytics, data);
+            console.log('📊 Loaded persisted analytics data');
+        }
+    } catch (error) {
+        console.warn('⚠️ Could not load persisted data:', error);
+    }
+}
+
+function saveAnalyticsData() {
+    try {
+        localStorage.setItem('trafficAnalytics', JSON.stringify(analytics));
+    } catch (error) {
+        console.warn('⚠️ Could not save analytics data:', error);
+    }
+}
+
+// Performance monitoring
+const performanceMonitor = {
+    sessionStart: Date.now(),
+    requestTimes: [],
+    lastMetricsUpdate: 0
+};
+
+function startPerformanceMonitoring() {
+    // Update performance metrics every 5 seconds
+    setInterval(updatePerformanceMetrics, 5000);
+    
+    // Initial update
+    updatePerformanceMetrics();
+}
+
+async function updatePerformanceMetrics() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/metrics`);
+        if (response.ok) {
+            const metrics = await response.json();
+            
+            document.getElementById('api-response-time').textContent = 
+                metrics.avg_response_time_ms ? `${metrics.avg_response_time_ms}ms` : '-';
+            
+            document.getElementById('total-requests').textContent = 
+                metrics.total_requests || '0';
+            
+            document.getElementById('requests-per-min').textContent = 
+                metrics.requests_per_minute ? metrics.requests_per_minute.toFixed(1) : '0';
+            
+            document.getElementById('system-uptime').textContent = 
+                formatUptime(metrics.uptime_seconds || 0);
+            
+        }
+    } catch (error) {
+        console.warn('Could not fetch performance metrics:', error);
+        document.getElementById('api-response-time').textContent = 'Error';
+    }
+}
+
+function formatUptime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
+}
+
+// Enhanced processDetectionResults to auto-save data
+const originalProcessDetectionResults = processDetectionResults;
+function enhancedProcessDetectionResults(detections, isVideo = false) {
+    originalProcessDetectionResults.call(this, detections, isVideo);
+    saveAnalyticsData(); // Auto-save after processing results
+}
+
+// Replace the function
+window.processDetectionResults = enhancedProcessDetectionResults;

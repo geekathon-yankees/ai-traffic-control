@@ -616,7 +616,7 @@ body {
 
 .metrics-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
     margin-bottom: 3rem;
 }
@@ -665,6 +665,9 @@ body {
 .metric-icon.cyclists { background: linear-gradient(135deg, #4facfe, #00f2fe); }
 .metric-icon.accuracy { background: linear-gradient(135deg, #43e97b, #38f9d7); }
 .metric-icon.co2 { background: linear-gradient(135deg, #28a745, #20c997); }
+.metric-icon.co2-car { background: linear-gradient(135deg, #dc3545, #c82333); }
+.metric-icon.co2-truck { background: linear-gradient(135deg, #fd7e14, #e55100); }
+.metric-icon.co2-bus { background: linear-gradient(135deg, #ffc107, #ff8f00); }
 
 .metric-content h3 {
     font-size: 2.5rem;
@@ -888,6 +891,82 @@ body {
 .env-recommendation span {
     font-size: 0.85rem;
     color: #155724;
+}
+
+/* Section Header with Controls */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3rem;
+}
+
+.section-controls {
+    display: flex;
+    gap: 1rem;
+}
+
+.reset-btn, .export-btn {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.reset-btn {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: white;
+}
+
+.reset-btn:hover {
+    background: linear-gradient(135deg, #c82333, #a71e2a);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.export-btn {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+}
+
+.export-btn:hover {
+    background: linear-gradient(135deg, #20c997, #17a2b8);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+/* Performance Metrics */
+.performance-metrics {
+    display: grid;
+    gap: 1rem;
+}
+
+.perf-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.perf-item:last-child {
+    border-bottom: none;
+}
+
+.perf-label {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.perf-value {
+    font-weight: 600;
+    color: #333;
+    font-family: 'Courier New', monospace;
 }
 
 /* Responsive Design */
