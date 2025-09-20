@@ -45,28 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
     animateStats();
 });
 
-function initializeApp() {
-    console.log('🚀 AI Traffic Dashboard Initialized');
-    
-    // Setup drag and drop for upload areas
-    setupDragAndDrop('image-upload', handleImageUpload);
-    setupDragAndDrop('video-upload', handleVideoUpload);
-    
-    // Smooth scrolling for navigation links
-    document.querySelectorAll('.nav-links a').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const targetId = link.getAttribute('href').substring(1);
-            const targetElement = document.getElementById(targetId);
-            if (targetElement) {
-                targetElement.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
-                });
-            }
-        });
-    });
-}
+// Duplicate function removed - using enhanced version below
 
 function setupEventListeners() {
     // Image input change
@@ -141,21 +120,36 @@ function switchTab(tabName) {
 
 // Image Upload Handler
 async function handleImageUpload(input) {
+    console.log('🖼️ handleImageUpload called:', { input: input.constructor.name, files: input.files?.length });
+    
     const file = input.files[0];
-    if (!file) return;
+    if (!file) {
+        console.warn('❌ No file selected');
+        return;
+    }
+    
+    console.log('📁 File info:', { 
+        name: file.name, 
+        type: file.type, 
+        size: file.size,
+        lastModified: file.lastModified
+    });
     
     // Validate file type
     if (!file.type.startsWith('image/')) {
+        console.error('❌ Invalid file type:', file.type);
         showNotification('Please select a valid image file', 'error');
         return;
     }
     
     // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
+        console.error('❌ File too large:', file.size);
         showNotification('Image size must be less than 10MB', 'error');
         return;
     }
     
+    console.log('🚀 Starting image analysis...');
     showLoading('Analyzing image for objects...');
     
     try {
@@ -165,18 +159,35 @@ async function handleImageUpload(input) {
         const formData = new FormData();
         formData.append('file', file);
         
+        console.log('🌐 Making API call to:', `${API_BASE_URL}/detect/image`);
+        
         // Call ML Gateway API
         const response = await fetch(`${API_BASE_URL}/detect/image`, {
             method: 'POST',
             body: formData
         });
         
+        console.log('📡 API Response:', { 
+            status: response.status, 
+            statusText: response.statusText,
+            ok: response.ok,
+            headers: Object.fromEntries(response.headers.entries())
+        });
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.error('❌ API Error:', { status: response.status, body: errorText });
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
         
         const result = await response.json();
         const processingTime = Math.round(performance.now() - startTime);
+        
+        console.log('✅ API Success:', { 
+            processingTime: `${processingTime}ms`,
+            detections: result.detections?.length || 0,
+            model: result.model 
+        });
         
         // Process detection results with enhanced analytics
         processDetectionResults(result.detections);
