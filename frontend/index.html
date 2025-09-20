@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Traffic Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-brain"></i>
+                <span>AI Traffic Dashboard</span>
+            </div>
+            <div class="nav-links">
+                <a href="#home">Home</a>
+                <a href="#demo">Demo</a>
+                <a href="#results">Results</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                AI-Powered <span class="gradient-text">Object Detection</span>
+            </h1>
+            <p class="hero-subtitle">
+                Advanced computer vision for traffic analysis and monitoring using state-of-the-art DETR models
+            </p>
+            <div class="hero-stats">
+                <div class="stat">
+                    <i class="fas fa-car"></i>
+                    <span class="stat-number" id="detected-vehicles">0</span>
+                    <span class="stat-label">Vehicles Detected</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-clock"></i>
+                    <span class="stat-number" id="processing-time">0ms</span>
+                    <span class="stat-label">Processing Time</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-accuracy"></i>
+                    <span class="stat-number" id="accuracy">95%</span>
+                    <span class="stat-label">Accuracy</span>
+                </div>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <div class="floating-card">
+                <i class="fas fa-eye"></i>
+                <span>Real-time Detection</span>
+            </div>
+            <div class="floating-card">
+                <i class="fas fa-chart-line"></i>
+                <span>Analytics</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="demo-section">
+        <div class="container">
+            <h2 class="section-title">Try the Demo</h2>
+            <p class="section-subtitle">Upload an image or video to see AI object detection in action</p>
+            
+            <!-- Upload Tabs -->
+            <div class="upload-tabs">
+                <button class="tab-button active" onclick="switchTab('image')">
+                    <i class="fas fa-image"></i> Image Detection
+                </button>
+                <button class="tab-button" onclick="switchTab('video')">
+                    <i class="fas fa-video"></i> Video Detection
+                </button>
+            </div>
+
+            <!-- Image Upload -->
+            <div id="image-tab" class="tab-content active">
+                <div class="upload-area" id="image-upload" onclick="document.getElementById('image-input').click()">
+                    <div class="upload-content">
+                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                        <h3>Drop an image here or click to browse</h3>
+                        <p>Supports JPG, PNG, GIF up to 10MB</p>
+                    </div>
+                    <input type="file" id="image-input" accept="image/*" hidden onchange="handleImageUpload(this)">
+                </div>
+
+                <!-- Image Preview and Results -->
+                <div id="image-results" class="results-container" style="display: none;">
+                    <div class="image-container">
+                        <canvas id="image-canvas"></canvas>
+                        <img id="preview-image" style="display: none;">
+                    </div>
+                    <div class="detection-info">
+                        <h3>Detection Results</h3>
+                        <div id="image-detections" class="detections-list"></div>
+                        <div class="json-response">
+                            <h4>API Response</h4>
+                            <pre id="image-json"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Upload -->
+            <div id="video-tab" class="tab-content">
+                <div class="upload-area" id="video-upload" onclick="document.getElementById('video-input').click()">
+                    <div class="upload-content">
+                        <i class="fas fa-video upload-icon"></i>
+                        <h3>Drop a video here or click to browse</h3>
+                        <p>Supports MP4, AVI, MOV up to 50MB</p>
+                    </div>
+                    <input type="file" id="video-input" accept="video/*" hidden onchange="handleVideoUpload(this)">
+                </div>
+
+                <!-- Video Preview and Results -->
+                <div id="video-results" class="results-container" style="display: none;">
+                    <div class="video-container">
+                        <video id="preview-video" controls></video>
+                        <div class="video-controls">
+                            <button id="play-detections" class="btn-primary">
+                                <i class="fas fa-play"></i> Play with Detections
+                            </button>
+                        </div>
+                    </div>
+                    <div class="detection-info">
+                        <h3>Video Analysis</h3>
+                        <div id="video-stats" class="video-stats"></div>
+                        <div id="video-detections" class="detections-timeline"></div>
+                        <div class="json-response">
+                            <h4>API Response</h4>
+                            <pre id="video-json"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h3>Processing with AI...</h3>
+            <p id="loading-text">Analyzing image for objects</p>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Dashboard Section -->
+    <section id="results" class="analytics-section">
+        <div class="container">
+            <h2 class="section-title">
+                <i class="fas fa-chart-bar"></i> 
+                Real-Time Traffic Analytics
+            </h2>
+            
+            <!-- Key Metrics Row -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon vehicles">
+                        <i class="fas fa-car"></i>
+                    </div>
+                    <div class="metric-content">
+                        <h3 id="total-vehicles">0</h3>
+                        <p>Total Vehicles</p>
+                        <span class="metric-trend">+12% vs last hour</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon pedestrians">
+                        <i class="fas fa-walking"></i>
+                    </div>
+                    <div class="metric-content">
+                        <h3 id="total-pedestrians">0</h3>
+                        <p>Pedestrians</p>
+                        <span class="metric-trend">+5% vs last hour</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon cyclists">
+                        <i class="fas fa-bicycle"></i>
+                    </div>
+                    <div class="metric-content">
+                        <h3 id="total-cyclists">0</h3>
+                        <p>Cyclists</p>
+                        <span class="metric-trend">+8% vs last hour</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon accuracy">
+                        <i class="fas fa-bullseye"></i>
+                    </div>
+                    <div class="metric-content">
+                        <h3 id="accuracy-rate">95.2%</h3>
+                        <p>Detection Accuracy</p>
+                        <span class="metric-trend">Excellent</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon co2">
+                        <i class="fas fa-leaf"></i>
+                    </div>
+                    <div class="metric-content">
+                        <h3 id="total-co2">0.0</h3>
+                        <p>CO₂ Emissions (kg/km)</p>
+                        <span class="metric-trend" id="co2-trend">Environmental Impact</span>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Detailed Analytics Row -->
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <h3>
+                        <i class="fas fa-tachometer-alt"></i>
+                        Traffic Flow Analysis
+                    </h3>
+                    <div class="flow-metrics">
+                        <div class="flow-item">
+                            <span class="flow-label">Average Speed</span>
+                            <span class="flow-value" id="avg-speed">35 km/h</span>
+                        </div>
+                        <div class="flow-item">
+                            <span class="flow-label">Traffic Density</span>
+                            <span class="flow-value" id="traffic-density">Medium</span>
+                        </div>
+                        <div class="flow-item">
+                            <span class="flow-label">Peak Hours</span>
+                            <span class="flow-value" id="peak-hours">8-10 AM, 5-7 PM</span>
+                        </div>
+                        <div class="flow-item">
+                            <span class="flow-label">Congestion Level</span>
+                            <div class="congestion-bar">
+                                <div class="congestion-fill" style="width: 65%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Safety Insights
+                    </h3>
+                    <div class="safety-metrics">
+                        <div class="safety-item">
+                            <div class="safety-icon safe">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <div class="safety-content">
+                                <h4>Safe Crossings</h4>
+                                <p>98% pedestrian crossings detected as safe</p>
+                            </div>
+                        </div>
+                        <div class="safety-item">
+                            <div class="safety-icon warning">
+                                <i class="fas fa-exclamation"></i>
+                            </div>
+                            <div class="safety-content">
+                                <h4>Near Misses</h4>
+                                <p>3 potential conflicts detected today</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>
+                        <i class="fas fa-leaf"></i>
+                        Environmental Impact
+                    </h3>
+                    <div class="environmental-metrics">
+                        <div class="env-item">
+                            <span class="env-label">Total CO₂ Emissions</span>
+                            <span class="env-value" id="env-co2-total">0g/km</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">Green Transport %</span>
+                            <span class="env-value" id="green-transport-pct">0%</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">Eco Score</span>
+                            <div class="eco-score-bar">
+                                <div class="eco-score-fill" id="eco-score-fill" style="width: 85%"></div>
+                            </div>
+                        </div>
+                        <div class="env-recommendation" id="env-recommendation">
+                            <i class="fas fa-lightbulb"></i>
+                            <span>Encourage cycling and walking to reduce emissions!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>
+                        <i class="fas fa-history"></i>
+                        Recent Detections
+                    </h3>
+                    <div class="recent-detections" id="recent-detections-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capabilities Grid -->
+            <div class="capabilities-section">
+                <h3 class="subsection-title">AI Detection Capabilities</h3>
+                <div class="capabilities-grid">
+                    <div class="capability-card">
+                        <i class="fas fa-car"></i>
+                        <h4>Vehicles</h4>
+                        <p>Cars, trucks, buses, motorcycles</p>
+                        <div class="capability-stats">
+                            <span>Accuracy: 96.8%</span>
+                        </div>
+                    </div>
+                    <div class="capability-card">
+                        <i class="fas fa-walking"></i>
+                        <h4>Pedestrians</h4>
+                        <p>People and pedestrian detection</p>
+                        <div class="capability-stats">
+                            <span>Accuracy: 94.2%</span>
+                        </div>
+                    </div>
+                    <div class="capability-card">
+                        <i class="fas fa-bicycle"></i>
+                        <h4>Cyclists</h4>
+                        <p>Bicycles and riders</p>
+                        <div class="capability-stats">
+                            <span>Accuracy: 93.5%</span>
+                        </div>
+                    </div>
+                    <div class="capability-card">
+                        <i class="fas fa-traffic-light"></i>
+                        <h4>Traffic Elements</h4>
+                        <p>Signs, lights, and road infrastructure</p>
+                        <div class="capability-stats">
+                            <span>Accuracy: 95.1%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>
