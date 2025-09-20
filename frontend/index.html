@@ -159,61 +159,168 @@
     <!-- Analytics Dashboard Section -->
     <section id="results" class="analytics-section">
         <div class="container">
-            <h2 class="section-title">
-                <i class="fas fa-chart-bar"></i> 
-                Real-Time Traffic Analytics
-            </h2>
+                <div class="section-header">
+                    <h2 class="section-title">
+                        <i class="fas fa-chart-bar"></i> 
+                        Real-Time Traffic Analytics
+                    </h2>
+                    <div class="section-controls">
+                        <button id="reset-analytics" class="reset-btn" title="Reset all analytics data">
+                            <i class="fas fa-refresh"></i> Reset Data
+                        </button>
+                        <button id="export-analytics" class="export-btn" title="Export analytics as JSON">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                </div>
             
-            <!-- Key Metrics Row -->
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-icon vehicles">
-                        <i class="fas fa-car"></i>
+            <!-- Enhanced Analytics Dashboard -->
+            <div class="enhanced-dashboard">
+                
+                <!-- Primary Metrics Section -->
+                <div class="metrics-section">
+                    <div class="section-header-mini">
+                        <i class="fas fa-chart-line section-icon"></i>
+                        <h4>Live Detection Metrics</h4>
                     </div>
-                    <div class="metric-content">
-                        <h3 id="total-vehicles">0</h3>
-                        <p>Total Vehicles</p>
-                        <span class="metric-trend">+12% vs last hour</span>
+                    <div class="primary-metrics-grid">
+                        <div class="metric-card enhanced primary">
+                            <div class="card-header">
+                                <div class="metric-icon vehicles">
+                                    <i class="fas fa-car"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="total-vehicles">0</h3>
+                                    <span class="metric-label">Total Vehicles</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer">
+                                <div class="progress-container">
+                                    <div class="progress-bar vehicles-progress"></div>
+                                </div>
+                                <span class="trend-indicator positive">+12% vs last hour</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card enhanced primary">
+                            <div class="card-header">
+                                <div class="metric-icon pedestrians">
+                                    <i class="fas fa-walking"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="total-pedestrians">0</h3>
+                                    <span class="metric-label">Pedestrians</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer">
+                                <div class="progress-container">
+                                    <div class="progress-bar pedestrians-progress"></div>
+                                </div>
+                                <span class="trend-indicator positive">+5% vs last hour</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card enhanced primary">
+                            <div class="card-header">
+                                <div class="metric-icon cyclists">
+                                    <i class="fas fa-bicycle"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="total-cyclists">0</h3>
+                                    <span class="metric-label">Cyclists</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer">
+                                <div class="progress-container">
+                                    <div class="progress-bar cyclists-progress"></div>
+                                </div>
+                                <span class="trend-indicator positive">+8% vs last hour</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card enhanced primary">
+                            <div class="card-header">
+                                <div class="metric-icon accuracy">
+                                    <i class="fas fa-bullseye"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="accuracy-rate">95.2%</h3>
+                                    <span class="metric-label">AI Accuracy</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer">
+                                <div class="progress-container">
+                                    <div class="progress-bar accuracy-progress" style="width: 95.2%"></div>
+                                </div>
+                                <span class="trend-indicator excellent">Excellent Performance</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-icon pedestrians">
-                        <i class="fas fa-walking"></i>
+
+                <!-- Environmental Impact Section -->
+                <div class="environmental-section">
+                    <div class="section-header-mini">
+                        <i class="fas fa-leaf section-icon"></i>
+                        <h4>Environmental Impact Analysis</h4>
                     </div>
-                    <div class="metric-content">
-                        <h3 id="total-pedestrians">0</h3>
-                        <p>Pedestrians</p>
-                        <span class="metric-trend">+5% vs last hour</span>
-                    </div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-icon cyclists">
-                        <i class="fas fa-bicycle"></i>
-                    </div>
-                    <div class="metric-content">
-                        <h3 id="total-cyclists">0</h3>
-                        <p>Cyclists</p>
-                        <span class="metric-trend">+8% vs last hour</span>
-                    </div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-icon accuracy">
-                        <i class="fas fa-bullseye"></i>
-                    </div>
-                    <div class="metric-content">
-                        <h3 id="accuracy-rate">95.2%</h3>
-                        <p>Detection Accuracy</p>
-                        <span class="metric-trend">Excellent</span>
-                    </div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-icon co2">
-                        <i class="fas fa-leaf"></i>
-                    </div>
-                    <div class="metric-content">
-                        <h3 id="total-co2">0.0</h3>
-                        <p>CO₂ Emissions (kg/km)</p>
-                        <span class="metric-trend" id="co2-trend">Environmental Impact</span>
+                    <div class="environmental-grid">
+                        <div class="metric-card enhanced environmental">
+                            <div class="card-header">
+                                <div class="metric-icon co2-car">
+                                    <i class="fas fa-car"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="co2-car">0g</h3>
+                                    <span class="metric-label">Cars CO₂/km</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer environmental-footer">
+                                <div class="impact-indicator low">
+                                    <div class="impact-dot"></div>
+                                    <span>Low Impact</span>
+                                </div>
+                                <span class="co2-baseline" id="co2-car-trend">120g baseline</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card enhanced environmental">
+                            <div class="card-header">
+                                <div class="metric-icon co2-truck">
+                                    <i class="fas fa-truck"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="co2-truck">0g</h3>
+                                    <span class="metric-label">Trucks CO₂/km</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer environmental-footer">
+                                <div class="impact-indicator high">
+                                    <div class="impact-dot"></div>
+                                    <span>High Impact</span>
+                                </div>
+                                <span class="co2-baseline" id="co2-truck-trend">850g baseline</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card enhanced environmental">
+                            <div class="card-header">
+                                <div class="metric-icon co2-bus">
+                                    <i class="fas fa-bus"></i>
+                                </div>
+                                <div class="metric-value">
+                                    <h3 id="co2-bus">0g</h3>
+                                    <span class="metric-label">Buses CO₂/km</span>
+                                </div>
+                            </div>
+                            <div class="metric-footer environmental-footer">
+                                <div class="impact-indicator medium">
+                                    <div class="impact-dot"></div>
+                                    <span>Medium Impact</span>
+                                </div>
+                                <span class="co2-baseline" id="co2-bus-trend">640g baseline</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -298,6 +405,31 @@
                         <div class="env-recommendation" id="env-recommendation">
                             <i class="fas fa-lightbulb"></i>
                             <span>Encourage cycling and walking to reduce emissions!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>
+                        <i class="fas fa-tachometer-alt"></i>
+                        Performance Metrics
+                    </h3>
+                    <div class="performance-metrics">
+                        <div class="perf-item">
+                            <span class="perf-label">API Response Time</span>
+                            <span class="perf-value" id="api-response-time">-</span>
+                        </div>
+                        <div class="perf-item">
+                            <span class="perf-label">Total Requests</span>
+                            <span class="perf-value" id="total-requests">0</span>
+                        </div>
+                        <div class="perf-item">
+                            <span class="perf-label">Requests/Min</span>
+                            <span class="perf-value" id="requests-per-min">0</span>
+                        </div>
+                        <div class="perf-item">
+                            <span class="perf-label">System Uptime</span>
+                            <span class="perf-value" id="system-uptime">-</span>
                         </div>
                     </div>
                 </div>
