@@ -79,9 +79,20 @@ jobs:
               python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements_cpu.txt
             }
           "
+      - name: Test SSH connection and debug
+        run: |
+          echo "Attempting to connect to: ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }}"
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -v ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "echo 'SSH connection successful'" || {
+            echo "SSH connection failed. Please verify:"
+            echo "1. EC2_HOST_BE secret is set to the correct IP/hostname"
+            echo "2. EC2_USER secret is set correctly (usually 'ec2-user' for Amazon Linux)"
+            echo "3. EC2_KEY secret contains the correct private key"
+            echo "4. EC2 instance is running and accessible"
+            exit 1
+          }
       - name: Stop existing backend process
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "pkill -f 'python3.*main.py' || echo 'No existing process found'"
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "pkill -f 'python3.*main.py' || echo 'No existing process found'" || echo 'Failed to connect - continuing anyway'
       - name: Start backend application
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /app/ml-gateway/app.log 2>&1 &"
