@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  #maven-build:
-  #  uses: ./.github/workflows/maven.yml
+  maven-build:
+    uses: ./.github/workflows/maven.yml
 
   deploy:
     name: Deploy
