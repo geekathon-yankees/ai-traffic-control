@@ -31,6 +31,23 @@ jobs:
       - name: Copy artifact to EC2
         run: |
           scp -o StrictHostKeyChecking=no target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+      - name: Install Java 21 on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! java -version 2>&1 | grep '21.'; then \
+            if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
+              sudo apt-get update && sudo apt-get install -y openjdk-21-jre; \
+            elif [ -f /etc/os-release ] && grep -qi 'amzn' /etc/os-release; then \
+              sudo yum install -y java-21-amazon-corretto-headless; \
+            else \
+              echo 'Unsupported OS. Please install Java 21 manually.'; exit 1; \
+            fi; \
+          fi"
+      - name: Verify JAR and Java on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ls -l /app/ai-traffic-control-0.0.1-SNAPSHOT.jar && java -version"
       - name: Restart application on EC2
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'java -jar' || true && nohup java -jar /app/ai-traffic-control-0.0.1-SNAPSHOT.jar > /app/app.log 2>&1 &"
+      - name: Show last 20 lines of app log
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -20 /app/app.log || echo 'Log file not found.'"
