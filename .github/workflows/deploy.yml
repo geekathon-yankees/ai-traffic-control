@@ -1,0 +1,30 @@
+name: "Deploy to AWS EC2"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  #maven-build:
+  #  uses: ./.github/workflows/maven.yml
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: maven-build
+    if: ${{ success() }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+      - name: Copy artifact to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+      - name: Restart application on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo systemctl restart myapp || pkill -f 'java -jar' && nohup java -jar ${{ secrets.DEPLOY_PATH }}/$(ls ${{ secrets.DEPLOY_PATH }} | grep .jar | head -n 1) > app.log 2>&1 &"
