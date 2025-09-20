@@ -29,3 +29,4 @@ class VideoDetections(BaseModel):
     fps_sample: int
     results: List[VideoFrameDetections] = Field(default_factory=list)
     counts_by_label: dict[str, int] = Field(default_factory=dict)
+    tracking_info: Optional[dict] = Field(default=None, description="Object tracking information for unique counts")

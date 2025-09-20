@@ -31,6 +31,37 @@ let analytics = {
     }
 };
 
+// Ensure clean start - check URL parameters for reset
+function ensureCleanState() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const forceReset = urlParams.get('reset') === 'true';
+    
+    if (forceReset) {
+        console.log('🔄 Force reset detected in URL - clearing all data');
+        localStorage.removeItem('trafficAnalytics');
+        
+        // Reset analytics to zero
+        Object.assign(analytics, {
+            totalVehicles: 0,
+            totalPedestrians: 0,
+            totalCyclists: 0,
+            totalDetections: 0,
+            accuracyRate: 95.2,
+            totalCO2: 0,
+            co2ByVehicleType: { 'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0 },
+            recentDetections: [],
+            entityCounts: {
+                'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
+                'person': 0, 'bicycle': 0, 'traffic light': 0, 'stop sign': 0
+            }
+        });
+        
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        console.log('✅ State reset to zero values');
+    }
+}
+
 // CO2 emission factors (kg CO2/km per vehicle type)
 const CO2_EMISSIONS = {
     'car': 0.12,        // Average car: 120g CO2/km
@@ -335,6 +366,8 @@ async function displayImageResults(file, result) {
                 const jsonElement = document.getElementById('image-json');
                 if (jsonElement) {
                     jsonElement.textContent = JSON.stringify(result, null, 2);
+                    // Auto-collapse the response by default
+                    setTimeout(autoCollapseResponses, 100);
                 }
                 
                 // Show results container
@@ -382,6 +415,9 @@ async function displayVideoResults(file, result) {
     
     // Display JSON response
     document.getElementById('video-json').textContent = JSON.stringify(result, null, 2);
+    
+    // Auto-collapse the response by default
+    setTimeout(autoCollapseResponses, 100);
     
     // Show results container
     document.getElementById('video-results').style.display = 'block';
@@ -683,24 +719,52 @@ function displayVideoStats(result) {
     const totalDetections = result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
     const uniqueLabels = Object.keys(result.counts_by_label).length;
     
-    container.innerHTML = `
-        <div class="video-stat-item">
-            <div class="video-stat-number">${result.processed_frames}</div>
-            <div class="video-stat-label">Frames Processed</div>
-        </div>
-        <div class="video-stat-item">
-            <div class="video-stat-number">${totalDetections}</div>
-            <div class="video-stat-label">Total Detections</div>
-        </div>
-        <div class="video-stat-item">
-            <div class="video-stat-number">${uniqueLabels}</div>
-            <div class="video-stat-label">Object Types</div>
-        </div>
-        <div class="video-stat-item">
-            <div class="video-stat-number">${result.fps_sample}</div>
-            <div class="video-stat-label">FPS Sample Rate</div>
-        </div>
-    `;
+    // Check if we have tracking information (new unique counting method)
+    if (result.tracking_info) {
+        const uniqueObjects = result.tracking_info.total_unique_objects;
+        const reductionPercent = result.tracking_info.reduction_percentage || 0;
+        
+        container.innerHTML = `
+            <div class="video-stat-item highlight">
+                <div class="video-stat-number">${uniqueObjects}</div>
+                <div class="video-stat-label">🎯 Unique Objects</div>
+                <div class="video-stat-note">Smart Tracking</div>
+            </div>
+            <div class="video-stat-item">
+                <div class="video-stat-number">${result.processed_frames}</div>
+                <div class="video-stat-label">Frames Processed</div>
+            </div>
+            <div class="video-stat-item comparison">
+                <div class="video-stat-number">${totalDetections}</div>
+                <div class="video-stat-label">Raw Detections</div>
+                <div class="video-stat-note">(-${reductionPercent}%)</div>
+            </div>
+            <div class="video-stat-item">
+                <div class="video-stat-number">${result.fps_sample}</div>
+                <div class="video-stat-label">FPS Sample Rate</div>
+            </div>
+        `;
+    } else {
+        // Fallback to old display method
+        container.innerHTML = `
+            <div class="video-stat-item">
+                <div class="video-stat-number">${result.processed_frames}</div>
+                <div class="video-stat-label">Frames Processed</div>
+            </div>
+            <div class="video-stat-item">
+                <div class="video-stat-number">${totalDetections}</div>
+                <div class="video-stat-label">Total Detections</div>
+            </div>
+            <div class="video-stat-item">
+                <div class="video-stat-number">${uniqueLabels}</div>
+                <div class="video-stat-label">Object Types</div>
+            </div>
+            <div class="video-stat-item">
+                <div class="video-stat-number">${result.fps_sample}</div>
+                <div class="video-stat-label">FPS Sample Rate</div>
+            </div>
+        `;
+    }
 }
 
 // Display Video Timeline
@@ -1137,6 +1201,12 @@ function initializeCharts() {
 
 
 function updateAnalyticsDashboard() {
+    // Don't update during reset
+    if (isResetInProgress) {
+        console.log('🚫 Skipping updateAnalyticsDashboard - reset in progress');
+        return;
+    }
+    
     // Update metric cards
     document.getElementById('total-vehicles').textContent = analytics.totalVehicles;
     document.getElementById('total-pedestrians').textContent = analytics.totalPedestrians;
@@ -1171,19 +1241,9 @@ function updateVehicleCO2Displays() {
                 const vehicleCount = analytics.entityCounts[vehicleType];
                 const emissionRate = CO2_EMISSIONS[vehicleType] * 1000; // Convert to grams
 
-                if (vehicleCount === 0) {
-                    trendElement.textContent = `${emissionRate}g baseline`;
-                    trendElement.style.color = '#6c757d'; // Gray for no detections
-                } else if (co2Value < 0.1) {
-                    trendElement.textContent = `Low impact (${vehicleCount} detected)`;
-                    trendElement.style.color = '#28a745';
-                } else if (co2Value < 0.5) {
-                    trendElement.textContent = `Medium impact (${vehicleCount} detected)`;
-                    trendElement.style.color = '#ffc107';
-                } else {
-                    trendElement.textContent = `High impact (${vehicleCount} detected)`;
-                    trendElement.style.color = '#dc3545';
-                }
+                // Remove all impact labels - just clear the text
+                trendElement.textContent = '';
+                trendElement.style.color = '#6c757d'; // Keep neutral gray color
             }
         }
     });
@@ -1224,19 +1284,11 @@ function updateEnvironmentalMetrics() {
         ecoScoreFillElement.style.width = `${ecoScore}%`;
     }
     
-    // Update environmental recommendation
+    // Update environmental recommendation - remove all recommendation text
     if (envRecommendationElement) {
         const recommendationSpan = envRecommendationElement.querySelector('span');
         if (recommendationSpan) {
-            if (greenPercent > 75) {
-                recommendationSpan.textContent = 'Excellent! Your area promotes sustainable transport! 🌱';
-            } else if (analytics.totalCO2 > 1.0) {
-                recommendationSpan.textContent = 'High emissions detected. Consider promoting electric vehicles and public transport.';
-            } else if (greenPercent < 25) {
-                recommendationSpan.textContent = 'Encourage more cycling and walking to improve air quality!';
-            } else {
-                recommendationSpan.textContent = 'Good balance! Keep promoting green transportation options.';
-            }
+            recommendationSpan.textContent = '';
         }
     }
 }
@@ -1346,6 +1398,9 @@ function processDetectionResults(detections, isVideo = false) {
 function initializeApp() {
     console.log('🚀 AI Traffic Dashboard Initialized');
     
+    // Ensure clean state if reset parameter is present
+    ensureCleanState();
+    
     // Setup drag and drop for upload areas
     setupDragAndDrop('image-upload', handleImageUpload);
     setupDragAndDrop('video-upload', handleVideoUpload);
@@ -1371,9 +1426,12 @@ function initializeApp() {
 
 // Enhanced functionality for data management and performance monitoring
 
-function resetAnalytics() {
-    if (confirm('Are you sure you want to reset all analytics data? This cannot be undone.')) {
-        // Reset analytics object
+async function resetAnalytics() {
+    if (confirm('🔄 Are you sure you want to reset ALL analytics data and backend metrics? This action cannot be undone.')) {
+        // Set flag to prevent animations during reset
+        isResetInProgress = true;
+        console.log('🔒 Reset in progress - blocking animations and updates');
+        // Reset frontend analytics object
         analytics = {
             totalVehicles: 0,
             totalPedestrians: 0,
@@ -1394,17 +1452,160 @@ function resetAnalytics() {
             }
         };
         
-        // Clear localStorage
+        // Clear localStorage completely
         localStorage.removeItem('trafficAnalytics');
         
-        // Update displays
+        // Debug: Log current analytics state
+        console.log('🔍 Analytics state after reset:', JSON.stringify(analytics, null, 2));
+        
+        // Reset backend metrics via API call
+        try {
+            showNotification('🔄 Resetting all metrics...', 'info');
+            
+            const response = await fetch('http://localhost:8000/metrics/reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('🔄 Backend metrics reset successfully:', result);
+                showNotification('✅ All analytics data and backend metrics reset to zero!', 'success');
+            } else {
+                console.warn('Failed to reset backend metrics');
+                showNotification('⚠️ Frontend reset. Backend metrics may not have reset.', 'warning');
+            }
+        } catch (error) {
+            console.error('Error resetting backend metrics:', error);
+            showNotification('⚠️ Frontend reset. Backend unavailable.', 'warning');
+        }
+        
+        // Force update all dashboard elements immediately
         updateAnalyticsDashboard();
+        updateEnhancedDashboard();
+        
+        // Reset performance metrics display
+        if (typeof updatePerformanceMetrics === 'function') {
+            updatePerformanceMetrics();
+        }
+        
+        // Force reset specific dashboard elements by their exact IDs
+        const elementsToReset = {
+            'total-vehicles': '0',
+            'total-pedestrians': '0', 
+            'total-cyclists': '0',
+            'co2-car': '0g',
+            'co2-truck': '0g',
+            'co2-bus': '0g'
+            // Note: accuracy-rate stays at 95.2%
+        };
+        
+        console.log('🔍 DEBUG: Starting element reset process...');
+        
+        Object.entries(elementsToReset).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) {
+                console.log('🔄 Found element:', id, 'Current:', element.textContent, 'Setting to:', value);
+                element.textContent = value;
+                element.innerHTML = value; // Also try innerHTML in case textContent doesn't work
+                
+                // Verify the change was applied
+                setTimeout(() => {
+                    console.log('✅ Verification for', id, '- Current value:', element.textContent);
+                }, 100);
+            } else {
+                console.warn('⚠️ Element not found:', id);
+                
+                // Try alternative search methods
+                const byClass = document.querySelector(`#${id}`);
+                const h3Elements = document.querySelectorAll('h3');
+                console.log('🔍 Alternative search results:');
+                console.log('- By querySelector:', byClass);
+                console.log('- All h3 elements:', Array.from(h3Elements).map(h => ({id: h.id, content: h.textContent})));
+            }
+        });
+        
+        // More aggressive reset approach
+        console.log('🔄 Trying aggressive reset of all number displays...');
+        document.querySelectorAll('h3').forEach((h3, index) => {
+            if (h3.textContent && /^\d+$/.test(h3.textContent.trim()) && !h3.textContent.includes('%')) {
+                console.log(`🔄 Aggressive reset h3[${index}]:`, h3.id, h3.textContent, '→ 0');
+                h3.textContent = '0';
+                h3.innerHTML = '0';
+            }
+        });
+        
+        // Clear any trend indicators  
+        document.querySelectorAll('.metric-footer .trend-indicator').forEach(el => {
+            if (!el.classList.contains('excellent')) {
+                el.textContent = '';
+            }
+        });
+        
+        // Clear environmental footers too
+        document.querySelectorAll('.environmental-footer').forEach(el => {
+            el.textContent = '';
+        });
         
         // Hide results
         document.getElementById('image-results').style.display = 'none';
         document.getElementById('video-results').style.display = 'none';
         
-        showNotification('Analytics data has been reset successfully!', 'success');
+        // Add a small delay to ensure all operations complete, then force one more update
+        setTimeout(() => {
+            console.log('🔄 Final cleanup after reset...');
+            
+            // Check analytics state before final update
+            console.log('🔍 Analytics state before final update:', JSON.stringify(analytics, null, 2));
+            
+            // DON'T call updateEnhancedDashboard() as it might override our manual reset
+            // updateEnhancedDashboard();
+            
+            // One more direct reset to be absolutely sure using the same approach
+            const finalReset = {
+                'total-vehicles': '0',
+                'total-pedestrians': '0', 
+                'total-cyclists': '0',
+                'co2-car': '0g',
+                'co2-truck': '0g',
+                'co2-bus': '0g'
+            };
+            
+            console.log('🔄 Final direct DOM manipulation...');
+            Object.entries(finalReset).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    console.log('🔧 Final reset:', id, element.textContent, '→', value);
+                    element.textContent = value;
+                    element.innerHTML = value;
+                    
+                    // Force style update
+                    element.style.color = '#333';
+                    element.setAttribute('data-reset', 'true');
+                }
+            });
+            
+            // Check if there are any event listeners or intervals that might be updating the values
+            console.log('🔍 Checking for any running intervals or pending updates...');
+            
+            // Clear all trend indicators and footers after final reset
+            document.querySelectorAll('.trend-indicator').forEach(el => {
+                if (!el.classList.contains('excellent')) {
+                    el.textContent = '';
+                }
+            });
+            document.querySelectorAll('.environmental-footer').forEach(el => {
+                el.textContent = '';
+            });
+            
+            // Clear the reset flag to allow normal operations
+            isResetInProgress = false;
+            console.log('🔓 Reset complete - re-enabling animations and updates');
+            
+            console.log('✅ Analytics reset complete - all data should be zero');
+        }, 500);
     }
 }
 
@@ -1464,8 +1665,12 @@ function startPerformanceMonitoring() {
     // Update performance metrics every 5 seconds
     setInterval(updatePerformanceMetrics, 5000);
     
-    // Initial update
+    // Update system metrics every 10 seconds (less frequent as it's more resource intensive)
+    setInterval(updateSystemMetrics, 10000);
+    
+    // Initial updates
     updatePerformanceMetrics();
+    updateSystemMetrics();
 }
 
 async function updatePerformanceMetrics() {
@@ -1490,6 +1695,82 @@ async function updatePerformanceMetrics() {
     } catch (error) {
         console.warn('Could not fetch performance metrics:', error);
         document.getElementById('api-response-time').textContent = 'Error';
+    }
+}
+
+async function updateSystemMetrics() {
+    try {
+        const [systemResponse, healthResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/system`),
+            fetch(`${API_BASE_URL}/health`)
+        ]);
+        
+        if (systemResponse.ok && healthResponse.ok) {
+            const systemMetrics = await systemResponse.json();
+            const healthMetrics = await healthResponse.json();
+            
+            // ===== APPLICATION-SPECIFIC METRICS =====
+            
+            // App CPU Usage (specific to ML Gateway process)
+            const appCpuUsage = systemMetrics.process?.cpu_percent || 0;
+            document.getElementById('app-cpu-usage').textContent = `${appCpuUsage.toFixed(1)}%`;
+            document.getElementById('app-cpu-progress').style.width = `${Math.min(appCpuUsage, 100)}%`;
+            
+            // App Memory Usage (specific to ML Gateway process)
+            const appMemoryMB = systemMetrics.process?.memory_mb || 0;
+            document.getElementById('app-memory-usage').textContent = `${appMemoryMB.toFixed(1)} MB`;
+            
+            // Model Information
+            const modelBackend = healthMetrics.model?.backend || 'Unknown';
+            const modelName = healthMetrics.model?.name || 'Unknown';
+            document.getElementById('model-backend').textContent = modelBackend.toUpperCase();
+            document.getElementById('model-name').textContent = modelName;
+            
+            // Model Device (GPU or CPU)
+            const modelDevice = systemMetrics.gpu?.available ? 
+                (systemMetrics.gpu.device || 'GPU') : 'CPU';
+            document.getElementById('model-device').textContent = `Running on: ${modelDevice}`;
+            
+            // GPU Information (for the application)
+            if (systemMetrics.gpu?.available) {
+                document.getElementById('gpu-status').textContent = 'Available';
+                document.getElementById('gpu-name').textContent = systemMetrics.gpu.name || systemMetrics.gpu.device;
+                
+                if (systemMetrics.gpu.memory_used_mb !== 'N/A' && systemMetrics.gpu.memory_total_mb !== 'N/A') {
+                    document.getElementById('gpu-memory').textContent = 
+                        `${systemMetrics.gpu.memory_used_mb} / ${systemMetrics.gpu.memory_total_mb} MB`;
+                } else {
+                    document.getElementById('gpu-memory').textContent = 'Memory info not available';
+                }
+            } else {
+                document.getElementById('gpu-status').textContent = 'CPU Only';
+                document.getElementById('gpu-name').textContent = 'No GPU acceleration';
+                document.getElementById('gpu-memory').textContent = '';
+            }
+            
+            // Process Uptime
+            const processUptime = healthMetrics.system?.uptime_seconds || 0;
+            document.getElementById('process-uptime').textContent = formatUptime(processUptime);
+            
+            console.log('🤖 App metrics updated:', {
+                appCpu: `${appCpuUsage.toFixed(1)}%`,
+                appMemory: `${appMemoryMB.toFixed(1)} MB`,
+                gpu: systemMetrics.gpu?.available ? 'Available' : 'Not available',
+                model: `${modelName} (${modelBackend})`,
+                uptime: formatUptime(processUptime)
+            });
+            
+        } else {
+            throw new Error(`HTTP ${systemResponse.status} or ${healthResponse.status}`);
+        }
+    } catch (error) {
+        console.warn('Could not fetch app metrics:', error);
+        // Set error states for app metrics only
+        document.getElementById('app-cpu-usage').textContent = 'Error';
+        document.getElementById('app-memory-usage').textContent = 'Error';
+        document.getElementById('model-backend').textContent = 'Error';
+        document.getElementById('gpu-status').textContent = 'Error';
+        document.getElementById('process-uptime').textContent = 'Error';
     }
 }
 
@@ -1554,6 +1835,12 @@ function updateProgressBars() {
 
 // Enhanced Analytics Dashboard Update with Animations
 function updateEnhancedDashboard() {
+    // Don't update during reset
+    if (isResetInProgress) {
+        console.log('🚫 Skipping updateEnhancedDashboard - reset in progress');
+        return;
+    }
+    
     // Trigger counter animations
     animateCounters();
     
@@ -1567,8 +1854,17 @@ function updateEnhancedDashboard() {
     updateRecentDetections();
 }
 
+// Add a flag to prevent animation during reset
+let isResetInProgress = false;
+
 // Animated Counter Effect
 function animateCounters() {
+    // Don't animate during reset
+    if (isResetInProgress) {
+        console.log('🚫 Skipping animateCounters - reset in progress');
+        return;
+    }
+    
     const counters = [
         { element: document.getElementById('total-vehicles'), target: analytics.totalVehicles },
         { element: document.getElementById('total-pedestrians'), target: analytics.totalPedestrians },
@@ -1613,3 +1909,41 @@ window.updateAnalyticsDashboard = function() {
     // Update enhanced dashboard
     updateEnhancedDashboard();
 };
+
+// Collapsible sections functionality
+function toggleCollapse(contentId) {
+    const content = document.getElementById(contentId);
+    const icon = document.getElementById(contentId.replace('-content', '-icon'));
+    
+    if (!content) {
+        console.warn('Collapsible content not found:', contentId);
+        return;
+    }
+    
+    if (content.classList.contains('expanded')) {
+        // Collapse
+        content.classList.remove('expanded');
+        if (icon) icon.classList.remove('rotated');
+        console.log('🔽 Collapsed:', contentId);
+    } else {
+        // Expand
+        content.classList.add('expanded');
+        if (icon) icon.classList.add('rotated');
+        console.log('🔼 Expanded:', contentId);
+    }
+}
+
+// Auto-collapse JSON responses by default after they're populated
+function autoCollapseResponses() {
+    const responses = ['image-json-content', 'video-json-content'];
+    responses.forEach(responseId => {
+        const content = document.getElementById(responseId);
+        const icon = document.getElementById(responseId.replace('-content', '-icon'));
+        
+        if (content && content.querySelector('pre') && content.querySelector('pre').textContent.trim()) {
+            // Start collapsed by default if there's content
+            content.classList.remove('expanded');
+            if (icon) icon.classList.remove('rotated');
+        }
+    });
+}

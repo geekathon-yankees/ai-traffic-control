@@ -3,7 +3,6 @@ uvicorn[standard]>=0.30.6
 huggingface_hub>=0.24.6
 ultralytics>=8.3.0
 opencv-python-headless>=4.10.0
-ffmpeg-python>=0.2.0
 numpy>=1.26.0
 pydantic>=2.9.0
 pydantic-settings>=2.5.0

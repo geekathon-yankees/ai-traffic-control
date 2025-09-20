@@ -466,22 +466,78 @@ body {
 }
 
 .json-response {
-    background: #1e1e1e;
+    border: 1px solid #e0e6ed;
     border-radius: 10px;
-    padding: 1rem;
     margin-top: 1rem;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.json-response h4 {
+.collapsible-header {
+    color: var(--primary-color);
+    margin: 0;
+    padding: 15px 20px;
+    font-size: 1.1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.3s ease;
+    user-select: none;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.collapsible-header:hover {
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    transform: translateY(-1px);
+}
+
+.collapsible-header:active {
+    transform: translateY(0);
+}
+
+.collapse-icon {
+    transition: transform 0.3s ease;
+    color: #64748b;
+}
+
+.collapse-icon.rotated {
+    transform: rotate(-180deg);
+}
+
+.response-badge {
+    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
     color: white;
-    margin-bottom: 0.5rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.json-response pre {
+.collapsible-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+    background: #1e1e1e;
+}
+
+.collapsible-content.expanded {
+    max-height: 800px;
+    transition: max-height 0.4s ease-in;
+}
+
+.collapsible-content pre {
     color: #a0a0a0;
     font-size: 0.875rem;
     overflow-x: auto;
     white-space: pre-wrap;
+    margin: 0;
+    padding: 20px;
 }
 
 /* Loading Overlay */
@@ -567,6 +623,48 @@ body {
 .video-stat-label {
     font-size: 0.875rem;
     color: #666;
+}
+
+/* Enhanced Video Stats for Tracking */
+.video-stat-note {
+    font-size: 0.7rem;
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
+.video-stat-item.highlight {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    transform: scale(1.05);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+    transition: all 0.3s ease;
+}
+
+.video-stat-item.highlight .video-stat-number {
+    color: white;
+}
+
+.video-stat-item.highlight .video-stat-label {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.video-stat-item.highlight .video-stat-note {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    display: inline-block;
+    font-size: 0.65rem;
+}
+
+.video-stat-item.comparison .video-stat-note {
+    color: #dc2626;
+    font-weight: 600;
+    background: rgba(220, 38, 38, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    display: inline-block;
+    font-size: 0.65rem;
 }
 
 /* Detection Timeline */
@@ -1325,6 +1423,128 @@ body {
     font-weight: 600;
     color: #333;
     font-family: 'Courier New', monospace;
+}
+
+/* System Resources Metrics */
+.system-metrics {
+    display: grid;
+    gap: 15px;
+}
+
+.resource-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    border-left: 3px solid #28a745;
+    transition: all 0.3s ease;
+}
+
+.resource-item:hover {
+    background: #e9ecef;
+    transform: translateY(-1px);
+}
+
+.resource-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.resource-label {
+    font-weight: 600;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9rem;
+}
+
+.resource-label i {
+    color: #28a745;
+    width: 16px;
+}
+
+.resource-value {
+    font-weight: bold;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+}
+
+.progress-bar-small {
+    width: 100%;
+    height: 6px;
+    background-color: #e9ecef;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill-small {
+    height: 100%;
+    transition: width 0.5s ease;
+    border-radius: 3px;
+}
+
+.cpu-progress {
+    background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+}
+
+.memory-progress {
+    background: linear-gradient(90deg, #17a2b8, #ffc107, #dc3545);
+}
+
+.disk-progress {
+    background: linear-gradient(90deg, #6f42c1, #fd7e14, #dc3545);
+}
+
+.gpu-info {
+    display: flex;
+    flex-direction: column;
+    margin-top: 5px;
+    gap: 2px;
+}
+
+.gpu-name {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.gpu-memory {
+    font-size: 0.75rem;
+    color: #868e96;
+}
+
+/* App-specific styling */
+.resource-item.app-specific {
+    border-left-color: #28a745;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
+}
+
+.app-cpu-progress {
+    background: linear-gradient(90deg, #28a745, #17a2b8, #fd7e14);
+}
+
+.app-memory-info, .model-info, .uptime-info {
+    display: flex;
+    flex-direction: column;
+    margin-top: 5px;
+    gap: 2px;
+}
+
+.memory-type, .model-name, .model-device, .uptime-detail {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.model-name {
+    font-weight: 500;
+}
+
+.model-device {
+    color: #28a745;
+    font-weight: 600;
 }
 
 /* Enhanced Dashboard Responsive Design */
