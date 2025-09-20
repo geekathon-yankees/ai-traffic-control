@@ -1,26 +1,16 @@
-name: "Deploy to AWS EC2"
+name: "Deploy Python App to AWS EC2"
 
 on:
   workflow_dispatch:
   push:
 
 jobs:
-  maven-build:
-    uses: ./.github/workflows/maven.yml
-
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: maven-build
-    if: ${{ success() }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Download JAR Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: traffic
-          path: target/
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
@@ -28,32 +18,30 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
         env:
           EC2_KEY: ${{ secrets.EC2_KEY }}
-      - name: Copy artifact to EC2
+      - name: Copy Python app to EC2
         run: |
-          scp -o StrictHostKeyChecking=no target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
-      - name: Install Java 21 on EC2
+          scp -o StrictHostKeyChecking=no -r src/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+          scp -o StrictHostKeyChecking=no requirements.txt ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+      - name: Ensure Python 3 and pip on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! java -version 2>&1 | grep '21.'; then \
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! python3 --version; then \
             if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
-              sudo apt-get update && sudo apt-get install -y openjdk-21-jre; \
+              sudo apt-get update && sudo apt-get install -y python3 python3-pip; \
             elif [ -f /etc/os-release ] && grep -qi 'amzn' /etc/os-release; then \
-              sudo yum install -y java-21-amazon-corretto-headless; \
+              sudo yum install -y python3 python3-pip; \
             else \
-              echo 'Unsupported OS. Please install Java 21 manually.'; exit 1; \
+              echo 'Unsupported OS. Please install Python 3 manually.'; exit 1; \
             fi; \
           fi"
-      - name: Verify JAR and Java on EC2
+      - name: Install Python dependencies on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ls -l /app/ai-traffic-control-0.0.1-SNAPSHOT.jar && java -version"
-      - name: Print EC2 environment variables
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app && python3 -m pip install --user -r requirements.txt"
+      - name: Restart Python app on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "printenv"
-      - name: Restart application on EC2 (login shell)
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'python3 main.py' || true && cd /app/src && nohup python3 main.py > /app/app.log 2>&1 &"
+      - name: Check if Python process is running
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app && bash -l -c 'java -jar ai-traffic-control-0.0.1-SNAPSHOT.jar > app.log 2>&1 &'"
-      - name: Check if Java process is running
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ps aux | grep '[j]ava -jar /app/ai-traffic-control-0.0.1-SNAPSHOT.jar' || echo 'Java process not running.'"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ps aux | grep '[p]ython3 main.py' || echo 'Python process not running.'"
       - name: Show last 20 lines of app log
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -20 /app/app.log || echo 'Log file not found.'"
