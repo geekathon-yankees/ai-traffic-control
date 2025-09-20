@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from typing import List, Tuple, Dict
-from huggingface_hub import hf_hub_download
 from PIL import Image
 from .schemas import Detection, BBox, ImageDetections
 from .config import settings
@@ -16,14 +15,9 @@ class Detector:
     def __init__(self):
         self.kind = settings.model_kind.lower().strip()
         if self.kind == "yolo":
-            # Download .pt from HF and load with Ultralytics
-            model_path = hf_hub_download(
-                repo_id=settings.hf_repo_id,
-                filename=settings.hf_filename,
-                token=settings.hf_token
-            )
-            self.model_name = f"{settings.hf_repo_id}:{os.path.basename(model_path)}"
-            self.yolo = YOLO(model_path)
+            # Load model directly - ultralytics will auto-download if needed
+            self.model_name = settings.hf_filename  # e.g., "yolov8n.pt" 
+            self.yolo = YOLO(settings.hf_filename)  # ultralytics auto-downloads public models
             # configure thresholds
             self.yolo.overrides["conf"] = settings.conf_threshold
             self.yolo.overrides["iou"] = settings.iou_threshold
