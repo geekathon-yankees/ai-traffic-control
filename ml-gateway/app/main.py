@@ -12,6 +12,11 @@ from typing import Optional
 import numpy as np
 import cv2
 import psutil
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 
 from .schemas import ImageDetections, VideoDetections
 from .infer import detector
@@ -24,7 +29,60 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# System information functions
+def get_gpu_info():
+    """Get GPU information if available"""
+    gpu_info = {
+        "available": False,
+        "device": "cpu",
+        "memory_used_mb": 0,
+        "memory_total_mb": 0,
+        "utilization_percent": 0
+    }
+    
+    if not TORCH_AVAILABLE:
+        return gpu_info
+    
+    try:
+        # Check for CUDA (NVIDIA)
+        if torch.cuda.is_available():
+            gpu_info["available"] = True
+            gpu_info["device"] = f"cuda:{torch.cuda.current_device()}"
+            gpu_info["name"] = torch.cuda.get_device_name(0)
+            
+            # Get memory info
+            memory_reserved = torch.cuda.memory_reserved(0)
+            memory_allocated = torch.cuda.memory_allocated(0)
+            gpu_info["memory_used_mb"] = round(memory_allocated / 1024**2, 2)
+            gpu_info["memory_total_mb"] = round(memory_reserved / 1024**2, 2)
+            
+        # Check for MPS (Apple Silicon)
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            gpu_info["available"] = True
+            gpu_info["device"] = "mps:0"
+            gpu_info["name"] = "Apple Silicon GPU (MPS)"
+            # MPS doesn't provide detailed memory stats like CUDA
+            gpu_info["memory_used_mb"] = "N/A"
+            gpu_info["memory_total_mb"] = "N/A"
+            gpu_info["utilization_percent"] = "N/A"
+            
+    except Exception as e:
+        logger.warning(f"Could not get GPU info: {e}")
+    
+    return gpu_info
+
 # Performance metrics
+def reset_performance_metrics():
+    """Reset all performance metrics to initial state"""
+    global performance_metrics
+    performance_metrics = {
+        "requests_count": 0,
+        "average_response_time": 0,
+        "total_detections": 0,
+        "start_time": time.time()
+    }
+    logger.info("🔄 Performance metrics reset to zero")
+
 performance_metrics = {
     "requests_count": 0,
     "average_response_time": 0,
@@ -50,6 +108,7 @@ def health():
     # Get system information
     memory = psutil.virtual_memory()
     cpu_percent = psutil.cpu_percent(interval=0.1)  # Non-blocking call
+    gpu_info = get_gpu_info()
     
     return {
         "status": "ok",
@@ -65,7 +124,8 @@ def health():
                 "total_gb": round(memory.total / (1024**3), 2),
                 "available_gb": round(memory.available / (1024**3), 2),
                 "used_percent": memory.percent
-            }
+            },
+            "gpu": gpu_info
         },
         "performance": {
             "total_requests": performance_metrics["requests_count"],
@@ -87,6 +147,74 @@ def get_metrics():
         "avg_response_time_ms": round(performance_metrics["average_response_time"] * 1000, 2),
         "requests_per_minute": round(performance_metrics["requests_count"] / (uptime / 60), 2) if uptime > 0 else 0,
         "detections_per_request": round(performance_metrics["total_detections"] / performance_metrics["requests_count"], 2) if performance_metrics["requests_count"] > 0 else 0
+    }
+
+@app.get("/system")
+def get_system_metrics():
+    """Get real-time system performance metrics (CPU, Memory, GPU)"""
+    try:
+        # CPU information
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_count = psutil.cpu_count()
+        cpu_freq = psutil.cpu_freq()
+        
+        # Memory information
+        memory = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        
+        # Disk information
+        disk = psutil.disk_usage('/')
+        
+        # GPU information
+        gpu_info = get_gpu_info()
+        
+        # Process information
+        process = psutil.Process()
+        process_memory = process.memory_info()
+        
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "cpu": {
+                "usage_percent": cpu_percent,
+                "count": cpu_count,
+                "frequency_mhz": round(cpu_freq.current, 2) if cpu_freq else None,
+                "load_average": psutil.getloadavg() if hasattr(psutil, 'getloadavg') else None
+            },
+            "memory": {
+                "total_gb": round(memory.total / (1024**3), 2),
+                "available_gb": round(memory.available / (1024**3), 2),
+                "used_gb": round(memory.used / (1024**3), 2),
+                "used_percent": memory.percent,
+                "swap_used_gb": round(swap.used / (1024**3), 2),
+                "swap_percent": swap.percent
+            },
+            "disk": {
+                "total_gb": round(disk.total / (1024**3), 2),
+                "free_gb": round(disk.free / (1024**3), 2),
+                "used_percent": round((disk.used / disk.total) * 100, 1)
+            },
+            "gpu": gpu_info,
+            "process": {
+                "memory_mb": round(process_memory.rss / (1024**2), 2),
+                "cpu_percent": process.cpu_percent()
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting system metrics: {e}")
+        return {
+            "error": f"Could not retrieve system metrics: {str(e)}",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@app.post("/metrics/reset")
+def reset_metrics():
+    """Reset all performance metrics to zero"""
+    reset_performance_metrics()
+    return {
+        "status": "success",
+        "message": "All performance metrics have been reset to zero",
+        "timestamp": datetime.utcnow().isoformat(),
+        "reset_time": time.time()
     }
 
 @app.post("/detect/image", response_model=ImageDetections)
