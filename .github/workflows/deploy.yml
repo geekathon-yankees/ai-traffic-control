@@ -20,8 +20,8 @@ jobs:
           EC2_KEY: ${{ secrets.EC2_KEY }}
       - name: Copy Python app to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -r src/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
-          scp -o StrictHostKeyChecking=no requirements.txt ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+          scp -o StrictHostKeyChecking=no -r ml-gateway/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+          scp -o StrictHostKeyChecking=no ml-gateway/requirements.txt ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}/ml-gateway/
       - name: Ensure Python 3 and pip on EC2
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! python3 --version; then \
@@ -35,13 +35,13 @@ jobs:
           fi"
       - name: Install Python dependencies on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app && python3 -m pip install --user -r requirements.txt"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app/ml-gateway && python3 -m pip install --user -r requirements.txt"
       - name: Restart Python app on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'python3 main.py' || true && cd /app/src && nohup python3 main.py > /app/app.log 2>&1 &"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'python3 main.py' || true && cd /app/ml-gateway && nohup python3 main.py > /app/ml-gateway/app.log 2>&1 &"
       - name: Check if Python process is running
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ps aux | grep '[p]ython3 main.py' || echo 'Python process not running.'"
       - name: Show last 20 lines of app log
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -20 /app/app.log || echo 'Log file not found.'"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -20 /app/ml-gateway/app.log || echo 'Log file not found.'"
