@@ -24,7 +24,7 @@ jobs:
       - name: Copy backend files to EC2
         run: |
           scp -o StrictHostKeyChecking=no -r ml-gateway/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }}:/app/ml-gateway/
-      - name: Ensure Python 3 and pip on EC2
+      - name: Ensure Python 3 and system dependencies on EC2
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "if ! python3 --version; then \
             if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
@@ -37,6 +37,12 @@ jobs:
           fi; \
           if ! python3 -m pip --version; then \
             curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py; \
+          fi; \
+          echo 'Installing OpenCV system dependencies...'; \
+          if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
+            sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx libglib2.0-0; \
+          elif [ -f /etc/os-release ] && grep -qi 'amzn' /etc/os-release; then \
+            sudo yum install -y libglvnd-glx glib2; \
           fi"
       - name: Clean up disk space
         run: |
