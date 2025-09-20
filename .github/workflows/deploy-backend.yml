@@ -56,9 +56,28 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
             cd /app/ml-gateway && 
             python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements.txt || {
-              echo 'Installation failed, trying CPU-only PyTorch...'
-              # Create CPU-only requirements
-              sed 's/torch>=2.6.0/torch>=2.6.0+cpu/g; s/torchvision>=0.9.0/torchvision+cpu/g' requirements.txt > requirements_cpu.txt
+              echo 'Installation failed due to disk space, trying CPU-only PyTorch...'
+              
+              # Create CPU-only requirements by removing heavy GPU packages
+              cat > requirements_cpu.txt << 'EOF'
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+huggingface_hub>=0.24.6
+ultralytics>=8.3.0
+opencv-python-headless>=4.10.0
+numpy>=1.26.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+python-multipart>=0.0.9
+transformers>=4.44.0
+pillow>=10.0.0
+timm>=0.9.0
+psutil>=5.9.0
+EOF
+              
+              # Install CPU-only PyTorch from PyTorch index
+              python3 -m pip install --user --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
+              # Install remaining requirements
               python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements_cpu.txt
             }
           "
