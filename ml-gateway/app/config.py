@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 class Settings(BaseSettings):
     model_kind: str = "yolo"   # "yolo" or "detr"
@@ -9,7 +10,7 @@ class Settings(BaseSettings):
     video_fps_sample: int = 2
     video_max_frames: int = 120
     port: int = 8000
-    hf_token: str | None = None
+    hf_token: Optional[str] = None
     
     class Config:
         env_file = ".env"
