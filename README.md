@@ -71,22 +71,6 @@ The system calculates real-time CO2 emissions based on detected vehicle types:
 **AI Models**: DETR (facebook/detr-resnet-50), YOLOv8 (Ultralytics)
 **Infrastructure**: Python 3.11+, Virtual environments, HTTP servers
 
-## 📈 Performance
-
-- **Detection Speed**: ~0.4-0.5s per image
-- **Supported Formats**: JPG, PNG, MP4, WebM, AVI
-- **Concurrent Requests**: Multi-threaded processing
-- **Memory Usage**: Optimized for Apple Silicon (MPS) and CPU inference
-
-## 🤝 Contributing
-
-See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for contribution guidelines and development setup.
-
-## 📄 License
-
-This project is part of the AI Traffic Control research initiative.
-
----
 
 **Last Updated**: September 2025
 **Version**: 1.0.0
