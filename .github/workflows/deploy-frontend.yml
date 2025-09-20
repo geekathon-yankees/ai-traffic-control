@@ -1,0 +1,32 @@
+name: "Deploy Frontend to AWS EC2"
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+      - name: Ensure DEPLOY_PATH exists on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p /app && chmod 755 /app && chown ec2-user:ec2-user /app || true"
+      - name: Copy static frontend files to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no -r frontend/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/app/
+      - name: Restart web server (optional)
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo systemctl restart nginx || echo 'nginx not found, skipping restart.'"
+      - name: Show deployed files
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ls -l /app"

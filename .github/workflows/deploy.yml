@@ -1,0 +1,52 @@
+name: "Deploy Python App to AWS EC2"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+      - name: Copy Python app to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no -r ml-gateway/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+          scp -o StrictHostKeyChecking=no ml-gateway/requirements.txt ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}/ml-gateway/
+      - name: Ensure Python 3 and pip on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! python3 --version; then \
+            if [ -f /etc/os-release ] && grep -qi 'ubuntu\|debian' /etc/os-release; then \
+              sudo apt-get update && sudo apt-get install -y python3; \
+            elif [ -f /etc/os-release ] && grep -qi 'amzn' /etc/os-release; then \
+              sudo yum install -y python3; \
+            else \
+              echo 'Unsupported OS. Please install Python 3 manually.'; exit 1; \
+            fi; \
+          fi; \
+          if ! python3 -m pip --version; then \
+            curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py; \
+          fi"
+      - name: Install Python dependencies on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /app/ml-gateway && nohup python3 -m pip install --user -r requirements.txt > /app/ml-gateway/pip_install.log 2>&1 &"
+      - name: Show last 40 lines of pip install log
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -40 /app/ml-gateway/pip_install.log || echo 'pip_install.log not found.'"
+      - name: Restart Python app on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'python3 main.py' || true && cd /app/ml-gateway && nohup python3 main.py > /app/ml-gateway/app.log 2>&1 &"
+      - name: Check if Python process is running
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ps aux | grep '[p]ython3 main.py' || echo 'Python process not running.'"
+      - name: Show last 20 lines of app log
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "tail -20 /app/ml-gateway/app.log || echo 'Log file not found.'"
