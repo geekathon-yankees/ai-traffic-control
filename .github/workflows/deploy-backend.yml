@@ -2,7 +2,7 @@ name: "Deploy Backend to AWS EC2"
 
 on:
   workflow_dispatch:
-  psuh:
+  push:
 
 jobs:
   deploy-backend:
