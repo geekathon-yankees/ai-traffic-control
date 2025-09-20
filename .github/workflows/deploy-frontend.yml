@@ -18,9 +18,12 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
         env:
           EC2_KEY: ${{ secrets.EC2_KEY }}
+      - name: Ensure DEPLOY_PATH exists on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p ${DEPLOY_PATH} && chmod 755 ${DEPLOY_PATH} && chown $USER:$USER ${DEPLOY_PATH} || true"
       - name: Copy static frontend files to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -r frontend/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
+          scp -o StrictHostKeyChecking=no -r frontend ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}
       - name: Restart web server (optional)
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo systemctl restart nginx || echo 'nginx not found, skipping restart.'"
