@@ -1,0 +1,33 @@
+server:
+  port: 8080
+  tomcat:
+    max-threads: 200
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+model:
+  # Public HF path form: https://huggingface.co/{repoId}/resolve/{revision}/{filename}
+  repoId: Xenova/yolov8n
+  filename: yolov8n.onnx
+  revision: main
+  # If you host your own model, set modelUrl directly (overrides repo/filename).
+  # Leave empty to skip automatic download - place yolov8n.onnx manually in models/ directory
+  modelUrl: ""
+  # Thresholds
+  confThreshold: 0.25
+  iouThreshold: 0.45
+  inputSize: 640
+  # Video sampling
+  video:
+    fpsSample: 2
+    maxFrames: 120
