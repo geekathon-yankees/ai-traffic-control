@@ -1,10 +1,10 @@
-# 🚦 AI Traffic Control Dashboard
+# 🛣️ AI Traffic Control Dashboard
 
 ## 🎯 The Problem & Solution
 
 **Problem**: Municipal councils across Portugal, including cities like Leiria, face mounting pressure to address traffic congestion and its environmental impact. Traditional traffic monitoring systems lack real-time analysis capabilities and environmental impact awareness, leaving municipal authorities without the tools needed to make data-driven decisions. With increasing urbanization and stricter EU environmental regulations, municipal councils urgently need better tools to understand vehicle patterns, measure CO2 emissions, and take immediate action to reduce their environmental footprint for sustainable urban development.
 
-**Solution**: An AI-powered traffic control system specifically designed to empower municipal councils with actionable environmental data. This system provides real-time vehicle detection, comprehensive traffic pattern analysis, and estimated CO2 emission tracking, enabling municipal councils to make immediate data-driven decisions for environmental improvement. Using advanced computer vision models (DETR), the system analyzes images and videos to identify vehicles and to provid concrete environmental impact assessments that support municipal climate action plans.
+**Solution**: An AI-powered traffic control system specifically designed to empower municipal councils with actionable environmental data. This system provides real-time vehicle detection, comprehensive traffic pattern analysis, and estimated CO2 emission tracking, enabling municipal councils to make immediate data-driven decisions for environmental improvement. Using advanced computer vision models (DETR), the system analyzes images and videos to identify vehicles and to provide environmental assessments that support municipal climate action plans.
 
 ## 🌐 Live Demo
 
