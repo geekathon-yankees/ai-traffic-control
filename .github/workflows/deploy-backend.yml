@@ -2,7 +2,6 @@ name: "Deploy Backend to AWS EC2"
 
 on:
   workflow_dispatch:
-  push:
 
 jobs:
   deploy-backend:
@@ -132,9 +131,9 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
             echo 'Testing if backend is responding to requests...'
             for i in {1..20}; do
-              if curl -s -f http://localhost:8000/docs >/dev/null 2>&1; then
+              if curl -s -f http://localhost:80/docs >/dev/null 2>&1; then
                 echo '✅ Backend is responding to HTTP requests!'
-                echo 'FastAPI docs available at: http://\$(curl -s ipinfo.io/ip):8000/docs'
+                echo 'FastAPI docs available at: http://\$(curl -s ipinfo.io/ip):80/docs'
                 break
               fi
               if [ \$i -eq 20 ]; then
@@ -163,14 +162,14 @@ jobs:
             ps aux | grep uvicorn | grep -v grep
             echo ''
             echo 'Port Status:'
-            netstat -tlnp | grep :8000 || echo 'Port check failed - but app may still be starting'
+            netstat -tlnp | grep :80 || echo 'Port check failed - but app may still be starting'
             echo ''
             echo 'API Health Check:'
-            curl -s http://localhost:8000/docs >/dev/null && echo '✅ FastAPI docs accessible' || echo '⚠️  API may still be starting'
+            curl -s http://localhost:80/docs >/dev/null && echo '✅ FastAPI docs accessible' || echo '⚠️  API may still be starting'
             echo ''
             echo 'External Access:'
-            echo '📍 Your API is available at: http://'\$(curl -s ipinfo.io/ip)':8000'
-            echo '📖 API Documentation: http://'\$(curl -s ipinfo.io/ip)':8000/docs'
+            echo '📍 Your API is available at: http://'\$(curl -s ipinfo.io/ip)':80'
+            echo '📖 API Documentation: http://'\$(curl -s ipinfo.io/ip)':80/docs'
             echo ''
             echo 'Disk Usage:'
             df -h / | head -2
