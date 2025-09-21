@@ -5,6 +5,7 @@ const API_BASE_URL = 'http://localhost:8000';
 let currentVideoData = null;
 let detectionColors = {};
 let colorIndex = 0;
+let isProcessingDragDrop = false; // Flag to prevent duplicate calls
 const colors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
     '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA'
@@ -89,15 +90,19 @@ document.addEventListener('DOMContentLoaded', function() {
 function setupEventListeners() {
     // Image input change
     document.getElementById('image-input').addEventListener('change', (e) => {
-        if (e.target.files[0]) {
+        if (e.target.files[0] && !isProcessingDragDrop) {
             handleImageUpload(e.target);
         }
     });
     
     // Video input change
     document.getElementById('video-input').addEventListener('change', (e) => {
-        if (e.target.files[0]) {
+        console.log('📹 Video input change event, isProcessingDragDrop:', isProcessingDragDrop);
+        if (e.target.files[0] && !isProcessingDragDrop) {
+            console.log('📹 Calling handleVideoUpload from change event');
             handleVideoUpload(e.target);
+        } else if (isProcessingDragDrop) {
+            console.log('📹 Skipping change event due to drag & drop processing');
         }
     });
     
@@ -134,9 +139,22 @@ function setupDragAndDrop(elementId, handler) {
                 document.getElementById('image-input') : 
                 document.getElementById('video-input');
             
-            // Create a new FileList-like object
+            console.log('🎯 Drag & drop detected for:', elementId);
+            
+            // Set flag to prevent duplicate calls from change event
+            isProcessingDragDrop = true;
+            console.log('🎯 Set isProcessingDragDrop to true');
+            
+            // Set files and call handler directly
             input.files = files;
+            console.log('🎯 Calling handler directly from drag & drop');
             handler(input);
+            
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isProcessingDragDrop = false;
+                console.log('🎯 Reset isProcessingDragDrop to false');
+            }, 500); // Increased from 100ms to 500ms
         }
     });
 }
@@ -266,18 +284,32 @@ async function handleImageUpload(input) {
 
 // Video Upload Handler
 async function handleVideoUpload(input) {
+    console.log('🎬 handleVideoUpload called, isProcessingDragDrop:', isProcessingDragDrop);
+    
+    // Additional safety check to prevent duplicate calls
+    if (input._processingVideo) {
+        console.log('🎬 Already processing this input, skipping duplicate call');
+        return;
+    }
+    input._processingVideo = true;
+    
     const file = input.files[0];
-    if (!file) return;
+    if (!file) {
+        input._processingVideo = false;
+        return;
+    }
     
     // Validate file type
     if (!file.type.startsWith('video/')) {
         showNotification('Please select a valid video file', 'error');
+        input._processingVideo = false;
         return;
     }
     
     // Validate file size (50MB)
     if (file.size > 50 * 1024 * 1024) {
         showNotification('Video size must be less than 50MB', 'error');
+        input._processingVideo = false;
         return;
     }
     
@@ -345,10 +377,16 @@ async function handleVideoUpload(input) {
         // Refresh hero stats with latest detection run
         setTimeout(() => loadLastDetectionRun(), 500);
         
+        // Reset processing flag
+        input._processingVideo = false;
+        
     } catch (error) {
         console.error('Error processing video:', error);
         hideLoading();
         showNotification('Error processing video. Please make sure the ML Gateway is running.', 'error');
+        
+        // Reset processing flag in error case
+        input._processingVideo = false;
     }
 }
 

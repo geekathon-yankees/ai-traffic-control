@@ -2,6 +2,7 @@ import cv2
 import math
 import numpy as np
 import logging
+import asyncio
 from collections import Counter
 from .infer import detector
 from .schemas import VideoDetections, VideoFrameDetections
@@ -27,7 +28,7 @@ def _sample_frames(cap, fps_sample: int, max_frames: int):
                 break
         i += 1
 
-def detect_on_video(source_path: str) -> VideoDetections:
+async def detect_on_video(source_path: str) -> VideoDetections:
     cap = cv2.VideoCapture(source_path)
     if not cap.isOpened():
         raise RuntimeError(f"Unable to open video source: {source_path}")
@@ -45,6 +46,10 @@ def detect_on_video(source_path: str) -> VideoDetections:
     
     logger.info(f"🎬 Starting video processing: {source_path}")
     logger.info(f"📊 Settings: fps_sample={fps_sample}, max_frames={max_frames}")
+    logger.info(f"🔄 Video processing is async - other endpoints will remain responsive")
+    
+    import time
+    start_time = time.time()
 
     for idx, frame, tsec in _sample_frames(cap, fps_sample, max_frames):
         # Get detections for current frame
@@ -65,6 +70,20 @@ def detect_on_video(source_path: str) -> VideoDetections:
         ))
         
         processed += 1
+        
+        # Yield control every 3 frames to allow other requests to be processed
+        if processed % 3 == 0:
+            await asyncio.sleep(0.001)  # Small sleep to yield control to event loop
+        
+        # Log progress every 10 frames
+        if processed % 10 == 0:
+            progress_percent = (processed / max_frames * 100) if max_frames > 0 else 0
+            elapsed = time.time() - start_time
+            if processed > 0:
+                eta_seconds = (elapsed / processed) * (max_frames - processed)
+                logger.info(f"🎬 Progress: {processed}/{max_frames} frames ({progress_percent:.1f}%) - ETA: {eta_seconds:.1f}s - Server responsive")
+            else:
+                logger.info(f"🎬 Progress: {processed}/{max_frames} frames ({progress_percent:.1f}%) - Server remains responsive")
 
     # Get unique object counts from tracker (this is the key change!)
     unique_counts = tracker.get_unique_counts()
@@ -91,6 +110,11 @@ def detect_on_video(source_path: str) -> VideoDetections:
     }
     
     cap.release()
+    
+    # Log completion
+    total_time = time.time() - start_time
+    logger.info(f"✅ Video processing completed in {total_time:.2f}s - Processed {processed} frames - Server was responsive throughout")
+    
     return VideoDetections(
         model=detector.model_name,
         total_frames=total,

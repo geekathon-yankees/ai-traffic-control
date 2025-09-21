@@ -154,7 +154,7 @@ def health():
     
     # Get system information
     memory = psutil.virtual_memory()
-    cpu_percent = psutil.cpu_percent(interval=0.1)  # Non-blocking call
+    cpu_percent = psutil.cpu_percent(interval=0.05)  # Faster, less blocking call
     gpu_info = get_gpu_info()
     
     return {
@@ -202,7 +202,7 @@ def get_system_metrics():
     """Get real-time system performance metrics (CPU, Memory, GPU)"""
     try:
         # CPU information
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_percent = psutil.cpu_percent(interval=0.05)
         cpu_count = psutil.cpu_count()
         cpu_freq = psutil.cpu_freq()
         
@@ -332,7 +332,7 @@ async def detect_video(
                 tmp.write(await file.read())
                 tmp_path = tmp.name
             try:
-                res = detect_on_video(tmp_path)
+                res = await detect_on_video(tmp_path)
                 
                 # Calculate total detections from all frames for last run tracking
                 all_detections = []
@@ -350,7 +350,7 @@ async def detect_video(
             # Handle video URL
             if not source_url.startswith(("http://", "https://", "rtsp://", "rtmp://")):
                 raise ValueError("Invalid URL format. Must start with http://, https://, rtsp://, or rtmp://")
-            res = detect_on_video(source_url)
+            res = await detect_on_video(source_url)
             
             # Calculate total detections from all frames for last run tracking
             all_detections = []
