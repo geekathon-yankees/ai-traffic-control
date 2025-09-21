@@ -346,29 +346,18 @@ The system can detect the following object classes:
 - `traffic light` - Traffic signals
 - `stop sign` - Stop signs
 
-*Note: Available classes depend on the selected model (DETR vs YOLOv8)*
+*Note: Uses DETR model for object detection*
 
 ## ⚙️ Configuration
 
-### Model Selection
+### Model Configuration
 
-Configure the model via environment variables in `ml-gateway/.env`:
-
-```bash
-# Use DETR model (default)
-MODEL_KIND=detr
-
-# Use YOLOv8 model
-MODEL_KIND=yolo
-HF_REPO_ID=ultralytics/yolov8n
-HF_FILENAME=yolov8n.pt
-```
+The system uses Facebook's DETR model by default. No additional model configuration is required.
 
 ### Detection Thresholds
 
 ```bash
 CONF_THRESHOLD=0.25    # Minimum confidence score (0.0-1.0)
-IOU_THRESHOLD=0.45     # IoU threshold for NMS (YOLO only)
 ```
 
 ### Video Processing

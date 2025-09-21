@@ -118,10 +118,6 @@ Models are automatically downloaded on first use. Ensure stable internet connect
 - **Size**: ~160MB
 - **Download**: Automatic via Transformers
 
-#### YOLOv8 Model (Optional)
-- **Model**: `ultralytics/yolov8n`
-- **Size**: ~6MB  
-- **Download**: Automatic via Hugging Face Hub
 
 ### Frontend Setup
 
@@ -151,15 +147,9 @@ php -S localhost:8080
 Create `.env` file in `ml-gateway/` directory:
 
 ```bash
-# Model Configuration
-MODEL_KIND=detr                    # "detr" or "yolo"
-HF_REPO_ID=ultralytics/yolov8n    # For YOLO models
-HF_FILENAME=yolov8n.pt            # Model file name
-HF_TOKEN=                         # Optional: Hugging Face token
-
-# Detection Thresholds
+# Model Configuration (DETR is used by default)
 CONF_THRESHOLD=0.25               # Confidence threshold (0.0-1.0)
-IOU_THRESHOLD=0.45                # IoU threshold for NMS (YOLO only)
+HF_TOKEN=                         # Optional: Hugging Face token
 
 # Video Processing
 VIDEO_FPS_SAMPLE=2                # Process every Nth frame
@@ -169,22 +159,9 @@ VIDEO_MAX_FRAMES=120              # Maximum frames to process
 PORT=8000                         # Backend server port
 ```
 
-### Model Selection
+### Model Configuration
 
-#### Using DETR (Recommended for accuracy)
-```bash
-MODEL_KIND=detr
-# No additional configuration needed
-```
-
-#### Using YOLOv8 (Recommended for speed)
-```bash
-MODEL_KIND=yolo
-HF_REPO_ID=ultralytics/yolov8n
-HF_FILENAME=yolov8n.pt
-CONF_THRESHOLD=0.25
-IOU_THRESHOLD=0.45
-```
+The system uses Facebook's DETR (Detection Transformer) model. No additional model configuration is required - DETR is used by default.
 
 ### Advanced Configuration
 

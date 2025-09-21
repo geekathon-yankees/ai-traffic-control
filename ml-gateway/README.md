@@ -1,12 +1,12 @@
 # ML Gateway (FastAPI)
 
-A REST API service for object detection on images and videos using YOLOv8 or DETR models.
+A REST API service for object detection on images and videos using the DETR model.
 
 ## Features
 
 - **Image Detection**: Upload images for object detection
 - **Video Detection**: Process video files or stream from URLs
-- **Flexible Models**: Switch between YOLOv8 (Ultralytics) and DETR (Facebook)
+- **DETR Model**: Uses Facebook's DETR (Detection Transformer) model
 - **Hugging Face Integration**: Automatic model downloads from HF Hub
 - **Docker Support**: Containerized deployment
 
@@ -36,30 +36,15 @@ docker run -p 8000:8000 --env-file env.example ml-gateway:latest
 
 ## Configuration
 
-### Model Selection
+### Model Configuration
 
-**YOLOv8 from HF Hub (default):**
-```bash
-MODEL_KIND=yolo
-HF_REPO_ID=ultralytics/yolov8n
-HF_FILENAME=yolov8n.pt
-```
-
-**DETR (Transformers):**
-```bash
-MODEL_KIND=detr
-# HF_* variables ignored for DETR
-```
+The service uses Facebook's DETR (Detection Transformer) model by default. No additional model configuration is required.
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MODEL_KIND` | `yolo` | Model type: `yolo` or `detr` |
-| `HF_REPO_ID` | `ultralytics/yolov8n` | Hugging Face repository ID |
-| `HF_FILENAME` | `yolov8n.pt` | Model filename in the repo |
 | `CONF_THRESHOLD` | `0.25` | Confidence threshold for detections |
-| `IOU_THRESHOLD` | `0.45` | IoU threshold for NMS |
 | `VIDEO_FPS_SAMPLE` | `2` | Sample rate for video processing (FPS) |
 | `VIDEO_MAX_FRAMES` | `120` | Maximum frames to process per video |
 | `PORT` | `8000` | Server port |
@@ -94,7 +79,7 @@ curl -X POST "http://localhost:8000/detect/video?source_url=https://sample-video
 ### Image Detection Response
 ```json
 {
-  "model": "ultralytics/yolov8n:yolov8n.pt",
+  "model": "facebook/detr-resnet-50",
   "detections": [
     {
       "bbox": {
@@ -114,7 +99,7 @@ curl -X POST "http://localhost:8000/detect/video?source_url=https://sample-video
 ### Video Detection Response
 ```json
 {
-  "model": "ultralytics/yolov8n:yolov8n.pt",
+  "model": "facebook/detr-resnet-50",
   "total_frames": 1000,
   "processed_frames": 60,
   "fps_sample": 2,
@@ -170,4 +155,4 @@ ml-gateway/
 ### Performance
 - Use GPU-enabled Docker images for better performance
 - Adjust `VIDEO_FPS_SAMPLE` and `VIDEO_MAX_FRAMES` for your needs
-- Consider using smaller models (yolov8n vs yolov8x) for faster inference
+- Adjust detection confidence threshold for speed vs accuracy trade-off

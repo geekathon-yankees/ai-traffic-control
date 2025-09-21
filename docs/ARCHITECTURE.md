@@ -22,7 +22,6 @@ graph TB
     
     subgraph "AI/ML Layer"
         I[DETR Model]
-        J[YOLOv8 Support]
         K[Hugging Face Hub]
         L[Image Preprocessing]
     end
@@ -74,25 +73,19 @@ app.add_middleware(
 ```python
 class Detector:
     def __init__(self):
-        if self.kind == "yolo":
-            # YOLOv8 via Ultralytics
-            model_path = hf_hub_download(...)
-            self.yolo = YOLO(model_path)
-        else:
-            # DETR via Transformers pipeline
-            self.pipe = pipeline("object-detection", model="facebook/detr-resnet-50")
+        # Uses DETR via Transformers pipeline
+        self.pipe = pipeline("object-detection", model="facebook/detr-resnet-50")
+        self.model_name = "facebook/detr-resnet-50"
+        self.backend = "detr"
     
     def predict_image(self, img_bgr: np.ndarray) -> ImageDetections:
         # Convert BGR to RGB
         img_rgb = img_bgr[:, :, ::-1]
         
-        if self.backend == "yolo":
-            results = self.yolo.predict(source=img_rgb, verbose=False)[0]
-            # Process YOLO results...
-        else:
-            # DETR pipeline expects PIL Image
-            img_pil = Image.fromarray(img_rgb)
-            predictions = self.pipe(img_pil)
+        # DETR pipeline expects PIL Image
+        img_pil = Image.fromarray(img_rgb)
+        predictions = self.pipe(img_pil)
+        # Process DETR results...
             # Process DETR results...
 ```
 
@@ -101,7 +94,6 @@ class Detector:
   - Model: `facebook/detr-resnet-50`
   - Input: PIL Images (RGB format)
   - Output: Bounding boxes, labels, confidence scores
-- **YOLOv8 (Alternative)**: Ultralytics implementation
   - Downloaded from Hugging Face Hub
   - Configurable confidence/IoU thresholds
 
@@ -355,11 +347,8 @@ flowchart TD
 
 ### Environment Variables (`ml-gateway/.env`)
 ```bash
-MODEL_KIND=detr                    # "yolo" or "detr"
-HF_REPO_ID=ultralytics/yolov8n    # For YOLO models
-HF_FILENAME=yolov8n.pt            # Model file
+# DETR model is used by default
 CONF_THRESHOLD=0.25               # Detection confidence threshold
-IOU_THRESHOLD=0.45                # IoU threshold for NMS
 VIDEO_FPS_SAMPLE=2                # Frame sampling rate
 VIDEO_MAX_FRAMES=120              # Maximum frames to process
 PORT=8000                         # Server port
@@ -369,9 +358,7 @@ HF_TOKEN=                         # Hugging Face token (optional)
 ### Model Configuration
 ```python
 class Settings(BaseSettings):
-    model_kind: str = "yolo"
-    hf_repo_id: str = "ultralytics/yolov8n"
-    hf_filename: str = "yolov8n.pt"
+    # DETR model configuration is handled internally
     conf_threshold: float = 0.25
     iou_threshold: float = 0.45
     video_fps_sample: int = 2

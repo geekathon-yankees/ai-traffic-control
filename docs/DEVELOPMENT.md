@@ -373,12 +373,12 @@ git checkout -b docs/update-api-documentation
 
 **Examples**:
 ```bash
-feat(inference): add YOLOv8 model support
+feat(inference): improve DETR model performance
 
-- Implement YOLOv8 model loading from Hugging Face
+- Optimize DETR model loading from Hugging Face
 - Add configuration options for confidence thresholds
-- Update prediction pipeline for YOLO format
-- Add unit tests for YOLO inference
+- Update prediction pipeline for better accuracy
+- Add unit tests for DETR inference
 
 Closes #123
 ```
@@ -459,17 +459,17 @@ class BaseModel(ABC):
 
 #### 2. Implement New Model
 ```python
-# app/models/yolov9.py
+# Example: Custom DETR variant
 from app.models.base import BaseModel
 
-class YOLOv9Model(BaseModel):
+class CustomDETRModel(BaseModel):
     def __init__(self, model_path: str):
         self.model_path = model_path
         self.model = None
     
     def load_model(self):
-        from ultralytics import YOLO
-        self.model = YOLO(self.model_path)
+        from transformers import pipeline
+        self.model = pipeline("object-detection", model="facebook/detr-resnet-50")
     
     def predict(self, image: np.ndarray) -> List[Detection]:
         results = self.model.predict(image)
@@ -478,7 +478,7 @@ class YOLOv9Model(BaseModel):
     
     def get_model_info(self) -> dict:
         return {
-            "name": "YOLOv9",
+            "name": "Custom-DETR",
             "version": "1.0",
             "input_size": [640, 640],
             "classes": self.model.names
@@ -488,14 +488,14 @@ class YOLOv9Model(BaseModel):
 #### 3. Register Model
 ```python
 # app/infer.py
-from app.models.yolov9 import YOLOv9Model
+from app.models.custom_detr import CustomDETRModel
 
 class Detector:
     def __init__(self):
         model_type = settings.model_kind.lower()
         
-        if model_type == "yolov9":
-            self.model = YOLOv9Model(settings.model_path)
+        if model_type == "custom_detr":
+            self.model = CustomDETRModel(settings.model_path)
         elif model_type == "detr":
             # existing DETR implementation
         # ... other models

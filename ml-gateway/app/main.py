@@ -115,7 +115,7 @@ def health():
         "timestamp": datetime.utcnow().isoformat(),
         "model": {
             "name": detector.model_name,
-            "backend": "yolo" if hasattr(detector, "yolo") else "detr"
+            "backend": "detr"
         },
         "system": {
             "uptime_seconds": round(uptime, 2),

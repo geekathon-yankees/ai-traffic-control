@@ -37,7 +37,7 @@ Welcome to the AI Traffic Control System - a comprehensive solution for real-tim
 
 ## 🎯 Key Features
 
-- **Real-time Object Detection** - DETR/YOLOv8 model support
+- **Real-time Object Detection** - DETR model support
 - **Environmental Impact Tracking** - CO2 emissions by vehicle type
 - **Video & Image Analysis** - Comprehensive traffic monitoring
 - **Interactive Dashboard** - Modern web interface with analytics
@@ -49,7 +49,7 @@ Welcome to the AI Traffic Control System - a comprehensive solution for real-tim
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   FastAPI       │    │   AI Models     │
-│   Dashboard     │◄──►│   Backend       │◄──►│   DETR/YOLO     │
+│   Dashboard     │◄──►│   Backend       │◄──►│   DETR Model    │
 │   (Port 8080)   │    │   (Port 8000)   │    │   Hugging Face  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
@@ -68,7 +68,7 @@ The system calculates real-time CO2 emissions based on detected vehicle types:
 
 **Backend**: FastAPI, PyTorch, Transformers, OpenCV, Pydantic
 **Frontend**: HTML5, CSS3, JavaScript (ES6+), Chart.js
-**AI Models**: DETR (facebook/detr-resnet-50), YOLOv8 (Ultralytics)
+**AI Models**: DETR (facebook/detr-resnet-50)
 **Infrastructure**: Python 3.11+, Virtual environments, HTTP servers
 
 ## 📈 Performance
