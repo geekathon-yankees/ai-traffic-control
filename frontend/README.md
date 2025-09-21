@@ -1,6 +1,36 @@
-# 🎨 AI Traffic Dashboard
+# 🚦 AI Traffic Control Dashboard
 
-A beautiful, modern web interface for the ML Gateway API featuring real-time object detection visualization optimized for traffic analysis.
+## 🎯 The Problem & Solution
+
+**Problem**: Municipal councils across Portugal, including cities like Leiria, face mounting pressure to address traffic congestion and its environmental impact. Traditional traffic monitoring systems lack real-time analysis capabilities and environmental impact awareness, leaving municipal authorities without the tools needed to make data-driven decisions. With increasing urbanization and stricter EU environmental regulations, câmaras municipais urgently need better tools to understand vehicle patterns, measure CO2 emissions, and take immediate action to reduce their environmental footprint for sustainable urban development.
+
+**Solution**: An AI-powered traffic control system specifically designed to empower municipal councils with actionable environmental data. This system provides real-time vehicle detection, comprehensive traffic pattern analysis, and precise CO2 emission tracking, enabling câmaras municipais to make immediate data-driven decisions for environmental improvement. Using advanced computer vision models (DETR), the system analyzes images and videos to identify vehicles, calculate traffic density, and deliver concrete environmental impact assessments that support municipal climate action plans.
+
+## 🌐 Live Demo
+
+**Try it now**: [https://yankees.pt](https://yankees.pt)
+
+Experience the AI traffic analysis in action with our live deployment! Upload your own traffic images or videos to see real-time object detection and environmental impact calculations.
+
+## 🎬 Demo Video
+
+### Watch the AI Traffic Control System in Action
+
+[![AI Traffic Control Demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+
+**What you'll see in the demo:**
+- 🚗 **Real-time vehicle detection** - Cars, trucks, buses, motorcycles identified with precision
+- 📊 **Live analytics dashboard** - Traffic density and environmental impact calculations  
+- 🎯 **Bounding box visualization** - Clear object detection overlays on images and videos
+- 📱 **Responsive design** - Beautiful interface working seamlessly across all devices
+- 🌱 **CO2 emissions tracking** - Environmental impact analysis based on vehicle types
+- ⚡ **Fast processing** - Near real-time analysis powered by DETR AI models
+
+> **Note**: Replace `YOUR_VIDEO_ID` with your actual YouTube video ID once you upload the demo video.
+
+---
+
+A beautiful, modern web interface featuring real-time object detection visualization optimized for traffic analysis and environmental monitoring.
 
 ## ✨ Features
 
@@ -16,6 +46,8 @@ A beautiful, modern web interface for the ML Gateway API featuring real-time obj
 ### Prerequisites
 - ML Gateway API running on `http://localhost:8000`
 - Modern web browser with JavaScript enabled
+
+> **📋 For complete system setup**, see the [Setup Documentation](../docs/SETUP.md)
 
 ### Running the Frontend
 
@@ -36,58 +68,37 @@ A beautiful, modern web interface for the ML Gateway API featuring real-time obj
    - Install "Live Server" extension
    - Right-click `index.html` → "Open with Live Server"
 
+## 🧪 Testing
+
+### Run Backend Tests
+```bash
+cd ml-gateway
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pytest
+```
+
+### End-to-End Testing
+```bash
+# Test the API endpoints
+curl -X POST "http://localhost:8000/detect/image" \
+  -F "file=@test_image.jpg"
+```
+
+### Frontend Testing
+The frontend can be tested manually by:
+1. Uploading sample images/videos through the web interface
+2. Verifying API connectivity and response handling
+3. Testing responsive design across different screen sizes
+
+> **📋 For complete setup and testing instructions**, see the [Setup Documentation](../docs/SETUP.md)
+
 ## 🎯 How to Use
 
-1. **Start ML Gateway API**: Make sure your FastAPI backend is running
-2. **Open Frontend**: Navigate to the frontend URL
-3. **Upload Media**: 
-   - Click "Image Detection" tab and upload an image
-   - Or click "Video Detection" tab and upload a video
-4. **View Results**: See beautiful visualizations with bounding boxes and analytics
+For detailed usage instructions, please see the [documentation](../docs/).
 
 ## 🛠️ Technical Details
 
-### API Integration
-- Connects to ML Gateway at `http://localhost:8000`
-- Uses `/detect/image` and `/detect/video` endpoints
-- Automatic health checks and error handling
-
-### Visualization Features
-- **Canvas-based rendering** for precise bounding box overlays
-- **Color-coded detections** with unique colors per object type
-- **Animated statistics** and smooth transitions
-- **Progress indicators** during processing
-
-### File Support
-- **Images**: JPG, PNG, GIF (up to 10MB)
-- **Videos**: MP4, AVI, MOV (up to 50MB)
-- **Drag & drop** support for easy uploads
-
-## 🎨 Design Features
-
-- **Modern gradients** and glass-morphism effects
-- **Smooth animations** and micro-interactions
-- **Responsive layout** adapting to all screen sizes
-- **Professional typography** using Inter font
-- **Accessible design** with proper contrast and focus states
-
-## 🔧 Customization
-
-### Changing API URL
-Edit the `API_BASE_URL` in `script.js`:
-```javascript
-const API_BASE_URL = 'http://your-api-url:8000';
-```
-
-### Adding New Object Types
-The frontend automatically handles new object types from the API with unique colors.
-
-### Styling
-Modify `styles.css` to customize:
-- Colors and gradients
-- Animation timings
-- Layout and spacing
-- Typography
+For complete technical documentation, API integration details, and architecture information, please see the [documentation](../docs/).
 
 ## 📋 File Structure
 ```
@@ -97,24 +108,6 @@ frontend/
 ├── script.js       # Interactive functionality
 └── README.md       # This documentation
 ```
-
-## 🌟 Features Showcase
-
-- **Hero Section**: Animated statistics and floating elements
-- **Upload Areas**: Drag & drop with visual feedback  
-- **Results Display**: Canvas-based bounding box visualization
-- **Video Timeline**: Frame-by-frame detection analysis
-- **Loading States**: Smooth progress animations
-- **Notifications**: Toast-style feedback messages
-- **Mobile Ready**: Responsive design for all devices
-
-## 🚀 Perfect for Showcasing
-
-This frontend is designed to beautifully showcase your ML Gateway API:
-- **Impressive visuals** for presentations and demos
-- **Real-time processing** shows AI capabilities
-- **Professional design** suitable for production use
-- **Interactive experience** engages users effectively
 
 ---
 
