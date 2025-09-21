@@ -1,92 +1,114 @@
-# AI Traffic Control System Documentation
+# 🚦 AI Traffic Control Dashboard
 
-## 📚 Documentation Overview
+## 🎯 The Problem & Solution
 
-Welcome to the AI Traffic Control System - a comprehensive solution for real-time traffic monitoring with environmental impact analysis.
+**Problem**: Municipal councils across Portugal, including cities like Leiria, face mounting pressure to address traffic congestion and its environmental impact. Traditional traffic monitoring systems lack real-time analysis capabilities and environmental impact awareness, leaving municipal authorities without the tools needed to make data-driven decisions. With increasing urbanization and stricter EU environmental regulations, câmaras municipais urgently need better tools to understand vehicle patterns, measure CO2 emissions, and take immediate action to reduce their environmental footprint for sustainable urban development.
 
-## 📖 Documentation Structure
+**Solution**: An AI-powered traffic control system specifically designed to empower municipal councils with actionable environmental data. This system provides real-time vehicle detection, comprehensive traffic pattern analysis, and precise CO2 emission tracking, enabling câmaras municipais to make immediate data-driven decisions for environmental improvement. Using advanced computer vision models (DETR), the system analyzes images and videos to identify vehicles, calculate traffic density, and deliver concrete environmental impact assessments that support municipal climate action plans.
 
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and components
-- **[API Reference](docs/API.md)** - Backend endpoints and schemas
-- **[Setup Guide](docs/SETUP.md)** - Installation and configuration
-- **[Frontend Guide](docs/FRONTEND.md)** - Dashboard features and usage
-- **[CO2 Calculations](docs/CO2_CALCULATIONS.md)** - Environmental impact methodology
-- **[Development Guide](docs/DEVELOPMENT.md)** - Contributing and extending the system
+## 🌐 Live Demo
+
+**Try it now**: [https://yankees.pt](https://yankees.pt)
+
+Experience the AI traffic analysis in action with our live deployment! Upload your own traffic images or videos to see real-time object detection and environmental impact calculations.
+
+## 🎬 Demo Video
+
+### Watch the AI Traffic Control System in Action
+
+[![AI Traffic Control Demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+
+**What you'll see in the demo:**
+- 🚗 **Real-time vehicle detection** - Cars, trucks, buses, motorcycles identified with precision
+- 📊 **Live analytics dashboard** - Traffic density and environmental impact calculations  
+- 🎯 **Bounding box visualization** - Clear object detection overlays on images and videos
+- 📱 **Responsive design** - Beautiful interface working seamlessly across all devices
+- 🌱 **CO2 emissions tracking** - Environmental impact analysis based on vehicle types
+- ⚡ **Fast processing** - Near real-time analysis powered by DETR AI models
+
+> **Note**: Replace `YOUR_VIDEO_ID` with your actual YouTube video ID once you upload the demo video.
+
+---
+
+A beautiful, modern web interface featuring real-time object detection visualization optimized for traffic analysis and environmental monitoring.
+
+## ✨ Features
+
+- **🖼️ Image Detection**: Upload images and see real-time object detection with bounding boxes
+- **🎥 Video Analysis**: Process videos frame-by-frame with detection timeline
+- **📊 Visual Analytics**: Beautiful charts and statistics
+- **🎨 Modern UI**: Gradient backgrounds, smooth animations, and responsive design
+- **⚡ Real-time Processing**: Live API integration with loading states
+- **📱 Mobile Friendly**: Responsive design works on all devices
 
 ## 🚀 Quick Start
 
-1. **Backend Setup**:
-   ```bash
-   cd ml-gateway
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   uvicorn app.main:app --host 0.0.0.0 --port 8000
-   ```
+### Prerequisites
+- ML Gateway API running on `http://localhost:8000`
+- Modern web browser with JavaScript enabled
 
-2. **Frontend Setup**:
+> **📋 For complete system setup**, see the [Setup Documentation](docs/SETUP.md)
+
+### Running the Frontend
+
+1. **Option 1: Python HTTP Server**
    ```bash
    cd frontend
    python3 -m http.server 8080
    ```
+   Open: http://localhost:8080
 
-3. **Access the Dashboard**:
-   - Frontend: http://localhost:8080
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+2. **Option 2: Node.js HTTP Server**
+   ```bash
+   cd frontend
+   npx serve .
+   ```
 
-## 🎯 Key Features
+3. **Option 3: Live Server (VS Code Extension)**
+   - Install "Live Server" extension
+   - Right-click `index.html` → "Open with Live Server"
 
-- **Real-time Object Detection** - DETR model support
-- **Environmental Impact Tracking** - CO2 emissions by vehicle type
-- **Video & Image Analysis** - Comprehensive traffic monitoring
-- **Interactive Dashboard** - Modern web interface with analytics
-- **Performance Monitoring** - Real-time system metrics
-- **Export Capabilities** - JSON data export for analysis
+## 🧪 Testing
 
-## 🏗️ System Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   FastAPI       │    │   AI Models     │
-│   Dashboard     │◄──►│   Backend       │◄──►│   DETR Model    │
-│   (Port 8080)   │    │   (Port 8000)   │    │   Hugging Face  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+### Run Backend Tests
+```bash
+cd ml-gateway
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pytest
 ```
 
-## 📊 Environmental Impact
+### End-to-End Testing
+```bash
+# Test the API endpoints
+curl -X POST "http://localhost:8000/detect/image" \
+  -F "file=@test_image.jpg"
+```
 
-The system calculates real-time CO2 emissions based on detected vehicle types:
+### Frontend Testing
+The frontend can be tested manually by:
+1. Uploading sample images/videos through the web interface
+2. Verifying API connectivity and response handling
+3. Testing responsive design across different screen sizes
 
-- **Cars**: 120g CO2/km
-- **Trucks**: 850g CO2/km
-- **Buses**: 640g CO2/km
-- **Motorcycles**: 90g CO2/km
-- **Bicycles/Pedestrians**: 0g CO2/km (eco-friendly! 🌱)
+> **📋 For complete setup and testing instructions**, see the [Setup Documentation](docs/SETUP.md)
 
-## 🛠️ Technology Stack
+## 🎯 How to Use
 
-**Backend**: FastAPI, PyTorch, Transformers, OpenCV, Pydantic
-**Frontend**: HTML5, CSS3, JavaScript (ES6+), Chart.js
-**AI Models**: DETR (facebook/detr-resnet-50)
-**Infrastructure**: Python 3.11+, Virtual environments, HTTP servers
+For detailed usage instructions, please see the [documentation](docs/).
 
-## 📈 Performance
+## 🛠️ Technical Details
 
-- **Detection Speed**: ~0.4-0.5s per image
-- **Supported Formats**: JPG, PNG, MP4, WebM, AVI
-- **Concurrent Requests**: Multi-threaded processing
-- **Memory Usage**: Optimized for Apple Silicon (MPS) and CPU inference
+For complete technical documentation, API integration details, and architecture information, please see the [documentation](docs/).
 
-## 🤝 Contributing
-
-See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for contribution guidelines and development setup.
-
-## 📄 License
-
-This project is part of the AI Traffic Control research initiative.
+## 📋 File Structure
+```
+frontend/
+├── index.html      # Main HTML structure
+├── styles.css      # Beautiful modern styling
+├── script.js       # Interactive functionality
+└── README.md       # This documentation
+```
 
 ---
 
-**Last Updated**: September 2025
-**Version**: 1.0.0
+**Ready to see AI in action!** 🤖✨
