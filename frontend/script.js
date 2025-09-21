@@ -1,6 +1,9 @@
 // AI Traffic Dashboard JavaScript
 const API_BASE_URL = 'https://api.yankees.pt';
 
+// Version configuration
+const APP_VERSION = '302';
+
 // Global variables
 let currentVideoData = null;
 let detectionColors = {};
@@ -76,8 +79,17 @@ const CO2_EMISSIONS = {
 
 // Chart instances removed
 
+// Initialize version display
+function initializeVersion() {
+    const versionElement = document.getElementById('app-version');
+    if (versionElement) {
+        versionElement.textContent = `v${APP_VERSION}`;
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    initializeVersion();
     initializeApp();
     setupEventListeners();
     loadPersistedData();

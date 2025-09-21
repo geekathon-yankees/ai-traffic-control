@@ -52,6 +52,17 @@ body {
     font-size: 1.8rem;
 }
 
+.nav-logo .version {
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 400;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: 0.8;
+}
+
 .nav-links {
     display: flex;
     gap: 2rem;
