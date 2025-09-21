@@ -308,13 +308,11 @@ async function handleVideoUpload(input) {
             frame.detections = filterDetections(frame.detections);
         });
         
-        // Collect all detections from all frames into a single array
-        const allDetections = result.results.reduce((acc, frame) => {
-            return acc.concat(frame.detections);
-        }, []);
+        // Apply object tracking to avoid counting the same object multiple times across frames
+        const uniqueDetections = trackObjectsAcrossFrames(result.results);
         
-        // Process all detections as a single session (not per frame)
-        processDetectionResults(allDetections, true);
+        // Process unique detections as a single session
+        processDetectionResults(uniqueDetections, true);
         
         // Store for later use
         currentVideoData = result;
@@ -322,9 +320,18 @@ async function handleVideoUpload(input) {
         // Display results
         await displayVideoResults(file, result);
         
-        const totalDetections = result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
+        // Calculate original vs unique detection counts for user feedback
+        const originalTotalDetections = result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
+        const uniqueDetectionCount = uniqueDetections.length;
+        const duplicatesRemoved = originalTotalDetections - uniqueDetectionCount;
+        
         hideLoading();
-        showNotification(`Processed ${result.processed_frames} frames with ${totalDetections} total detections!`, 'success');
+        
+        if (duplicatesRemoved > 0) {
+            showNotification(`📹 Processed ${result.processed_frames} frames: Found ${uniqueDetectionCount} unique objects (${duplicatesRemoved} duplicates removed)`, 'success');
+        } else {
+            showNotification(`📹 Processed ${result.processed_frames} frames with ${uniqueDetectionCount} unique objects!`, 'success');
+        }
         
         // Show Results section and navigation tab after video upload
         showResultsNavigation();
@@ -1328,6 +1335,120 @@ function filterDetections(detections) {
     }
     
     return filteredDetections;
+}
+
+// Track objects across video frames to avoid double counting
+function trackObjectsAcrossFrames(videoFrames) {
+    console.log(`🎯 Tracking objects across ${videoFrames.length} video frames`);
+    
+    // Collect all detections with frame info
+    const allDetections = [];
+    videoFrames.forEach((frame, frameIndex) => {
+        frame.detections.forEach(detection => {
+            allDetections.push({
+                ...detection,
+                frameIndex,
+                timestamp: frame.time_sec || frameIndex * 0.033 // Assume 30fps if no timestamp
+            });
+        });
+    });
+    
+    if (allDetections.length === 0) {
+        console.log('🎯 No detections to track');
+        return [];
+    }
+    
+    console.log(`🎯 Processing ${allDetections.length} total detections for tracking`);
+    
+    // Group detections by label
+    const detectionsByLabel = {};
+    allDetections.forEach(detection => {
+        const label = detection.label.toLowerCase();
+        if (!detectionsByLabel[label]) {
+            detectionsByLabel[label] = [];
+        }
+        detectionsByLabel[label].push(detection);
+    });
+    
+    const uniqueDetections = [];
+    
+    // Process each object type separately
+    Object.entries(detectionsByLabel).forEach(([label, detections]) => {
+        console.log(`🎯 Tracking ${detections.length} ${label} detections`);
+        
+        // Use spatial clustering to identify unique objects
+        const uniqueObjects = clusterDetectionsByLocation(detections, label);
+        uniqueDetections.push(...uniqueObjects);
+        
+        console.log(`🎯 Found ${uniqueObjects.length} unique ${label} objects (reduced from ${detections.length})`);
+    });
+    
+    const duplicatesRemoved = allDetections.length - uniqueDetections.length;
+    const reductionPercentage = allDetections.length > 0 ? (duplicatesRemoved / allDetections.length * 100).toFixed(1) : 0;
+    console.log(`🎯 Object tracking complete: ${allDetections.length} → ${uniqueDetections.length} unique objects (${reductionPercentage}% duplicates removed)`);
+    return uniqueDetections;
+}
+
+// Cluster detections by spatial proximity to identify unique objects
+function clusterDetectionsByLocation(detections, label) {
+    if (detections.length === 0) return [];
+    
+    // Calculate centroids for all detections
+    const detectionsWithCentroids = detections.map(detection => ({
+        ...detection,
+        centroid: {
+            x: (detection.bbox.x1 + detection.bbox.x2) / 2,
+            y: (detection.bbox.y1 + detection.bbox.y2) / 2
+        }
+    }));
+    
+    // Use different clustering thresholds based on object type
+    const clusterThresholds = {
+        'car': 150,     // Cars are larger, can tolerate more movement
+        'truck': 180,   // Trucks are even larger
+        'bus': 200,     // Buses are largest
+        'motorcycle': 100, // Motorcycles are smaller and move more
+        'bicycle': 80,  // Bicycles move more and are smaller
+        'person': 60    // People are smallest and move most
+    };
+    
+    const threshold = clusterThresholds[label] || 100; // Default threshold
+    
+    // Simple clustering algorithm: group nearby detections
+    const clusters = [];
+    const used = new Array(detectionsWithCentroids.length).fill(false);
+    
+    for (let i = 0; i < detectionsWithCentroids.length; i++) {
+        if (used[i]) continue;
+        
+        const cluster = [detectionsWithCentroids[i]];
+        used[i] = true;
+        
+        // Find all other detections within threshold distance
+        for (let j = i + 1; j < detectionsWithCentroids.length; j++) {
+            if (used[j]) continue;
+            
+            const distance = Math.sqrt(
+                Math.pow(detectionsWithCentroids[i].centroid.x - detectionsWithCentroids[j].centroid.x, 2) +
+                Math.pow(detectionsWithCentroids[i].centroid.y - detectionsWithCentroids[j].centroid.y, 2)
+            );
+            
+            if (distance <= threshold) {
+                cluster.push(detectionsWithCentroids[j]);
+                used[j] = true;
+            }
+        }
+        
+        clusters.push(cluster);
+    }
+    
+    // Return the best representative from each cluster
+    return clusters.map(cluster => {
+        // Use the detection with highest confidence as representative
+        return cluster.reduce((best, current) => 
+            current.score > best.score ? current : best
+        );
+    });
 }
 
 // Show Results Section and Navigation Tab
