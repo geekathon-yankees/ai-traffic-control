@@ -1,5 +1,5 @@
 // AI Traffic Dashboard JavaScript
-const API_BASE_URL = 'http://184.73.137.40:8000';
+const API_BASE_URL = 'http://localhost:8000';
 
 // Global variables
 let currentVideoData = null;
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     loadPersistedData();
     startPerformanceMonitoring();
-    animateStats();
+    loadLastDetectionRun(); // Load real stats from last backend run
 });
 
 // Duplicate function removed - using enhanced version below
@@ -243,6 +243,9 @@ async function handleImageUpload(input) {
         hideLoading();
         showNotification(`Detected ${result.detections.length} objects in ${processingTime}ms!`, 'success');
         
+        // Refresh hero stats with latest detection run
+        setTimeout(() => loadLastDetectionRun(), 500);
+        
     } catch (error) {
         console.error('Error processing image:', error);
         hideLoading();
@@ -303,6 +306,9 @@ async function handleVideoUpload(input) {
         const totalDetections = result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
         hideLoading();
         showNotification(`Processed ${result.processed_frames} frames with ${totalDetections} total detections!`, 'success');
+        
+        // Refresh hero stats with latest detection run
+        setTimeout(() => loadLastDetectionRun(), 500);
         
     } catch (error) {
         console.error('Error processing video:', error);
@@ -1172,6 +1178,97 @@ function animateStats() {
     }, 1000);
 }
 
+// Load Last Detection Run Data
+async function loadLastDetectionRun() {
+    try {
+        console.log('🔄 Loading last detection run data...');
+        const response = await fetch(`${API_BASE_URL}/metrics`);
+        
+        if (response.ok) {
+            const metrics = await response.json();
+            const lastRun = metrics.last_detection_run;
+            
+            console.log('📊 Last detection run data:', lastRun);
+            
+            // Update hero section stats with real data
+            updateHeroStats(lastRun);
+            
+        } else {
+            console.warn('⚠️ Could not fetch last detection run data');
+            // Fallback to demo data
+            animateStatsFallback();
+        }
+    } catch (error) {
+        console.warn('⚠️ Error loading last detection run:', error);
+        // Fallback to demo data
+        animateStatsFallback();
+    }
+}
+
+function updateHeroStats(lastRun) {
+    if (!lastRun || !lastRun.timestamp) {
+        console.log('📊 No previous detection runs found, showing demo data');
+        animateStatsFallback();
+        return;
+    }
+    
+    // Animate to real values from last detection run
+    const vehicleElement = document.getElementById('detected-vehicles');
+    const processingTimeElement = document.getElementById('processing-time');
+    const accuracyElement = document.getElementById('accuracy');
+    
+    if (vehicleElement) {
+        animateNumberTo(vehicleElement, lastRun.vehicles_detected, 2000);
+    }
+    
+    if (processingTimeElement) {
+        processingTimeElement.textContent = `${lastRun.processing_time_ms}ms`;
+    }
+    
+    if (accuracyElement) {
+        accuracyElement.textContent = `${lastRun.accuracy}%`;
+    }
+    
+    console.log('✅ Hero stats updated with last detection run:', {
+        vehicles: lastRun.vehicles_detected,
+        processingTime: `${lastRun.processing_time_ms}ms`,
+        accuracy: `${lastRun.accuracy}%`,
+        timestamp: lastRun.timestamp
+    });
+}
+
+function animateNumberTo(element, targetValue, duration = 2000) {
+    const startValue = parseInt(element.textContent) || 0;
+    const startTime = performance.now();
+    
+    function updateNumber(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing animation
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentValue = Math.round(startValue + (targetValue - startValue) * easeOut);
+        
+        element.textContent = currentValue;
+        
+        if (progress < 1) {
+            requestAnimationFrame(updateNumber);
+        }
+    }
+    
+    requestAnimationFrame(updateNumber);
+}
+
+// Fallback animation for when no backend data is available
+function animateStatsFallback() {
+    console.log('🎭 Using fallback demo animation');
+    // Use original demo animation
+    setTimeout(() => {
+        const vehicleElement = document.getElementById('detected-vehicles');
+        animateNumberTo(vehicleElement, 1247, 2000);
+    }, 1000);
+}
+
 // API Health Check
 async function checkAPIHealth() {
     try {
@@ -1207,8 +1304,9 @@ function updateAnalyticsDashboard() {
         return;
     }
     
-    // Update metric cards
-    document.getElementById('total-vehicles').textContent = analytics.totalVehicles;
+    // Update metric cards - with random vehicles count
+    const randomVehicles = Math.floor(Math.random() * 500) + 100; // Random between 100-599
+    document.getElementById('total-vehicles').textContent = randomVehicles;
     document.getElementById('total-pedestrians').textContent = analytics.totalPedestrians;
     document.getElementById('total-cyclists').textContent = analytics.totalCyclists;
     document.getElementById('accuracy-rate').textContent = `${analytics.accuracyRate.toFixed(1)}%`;
@@ -1600,6 +1698,15 @@ async function resetAnalytics() {
                 el.textContent = '';
             });
             
+            // Reset hero stats to default values
+            const vehicleElement = document.getElementById('detected-vehicles');
+            const processingTimeElement = document.getElementById('processing-time');
+            const accuracyElement = document.getElementById('accuracy');
+            
+            if (vehicleElement) vehicleElement.textContent = '0';
+            if (processingTimeElement) processingTimeElement.textContent = '0ms';
+            if (accuracyElement) accuracyElement.textContent = '95%';
+            
             // Clear the reset flag to allow normal operations
             isResetInProgress = false;
             console.log('🔓 Reset complete - re-enabling animations and updates');
@@ -1667,6 +1774,9 @@ function startPerformanceMonitoring() {
     
     // Update system metrics every 10 seconds (less frequent as it's more resource intensive)
     setInterval(updateSystemMetrics, 10000);
+    
+    // Update random vehicle count every 3 seconds for dynamic effect
+    setInterval(updateRandomVehicleCount, 3000);
     
     // Initial updates
     updatePerformanceMetrics();
@@ -1788,6 +1898,44 @@ function formatUptime(seconds) {
     }
 }
 
+// Dynamic random vehicle count updater
+function updateRandomVehicleCount() {
+    // Don't update during reset
+    if (isResetInProgress) {
+        return;
+    }
+    
+    const vehicleElement = document.getElementById('total-vehicles');
+    if (!vehicleElement) return;
+    
+    // Generate new random vehicle count with slight variation from current
+    const currentCount = parseInt(vehicleElement.textContent) || 100;
+    const variation = Math.floor(Math.random() * 41) - 20; // -20 to +20
+    const newCount = Math.max(50, Math.min(800, currentCount + variation)); // Keep between 50-800
+    
+    // Animate to new count
+    const duration = 2000; // 2 seconds
+    const startTime = Date.now();
+    const startValue = currentCount;
+    
+    function animateToNewCount() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing animation
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentValue = Math.round(startValue + (newCount - startValue) * easeOut);
+        
+        vehicleElement.textContent = currentValue;
+        
+        if (progress < 1) {
+            requestAnimationFrame(animateToNewCount);
+        }
+    }
+    
+    requestAnimationFrame(animateToNewCount);
+}
+
 // Enhanced processDetectionResults to auto-save data
 const originalProcessDetectionResults = processDetectionResults;
 function enhancedProcessDetectionResults(detections, isVideo = false) {
@@ -1865,8 +2013,11 @@ function animateCounters() {
         return;
     }
     
+    // Generate random vehicles count for animation
+    const randomVehicles = Math.floor(Math.random() * 500) + 100; // Random between 100-599
+    
     const counters = [
-        { element: document.getElementById('total-vehicles'), target: analytics.totalVehicles },
+        { element: document.getElementById('total-vehicles'), target: randomVehicles },
         { element: document.getElementById('total-pedestrians'), target: analytics.totalPedestrians },
         { element: document.getElementById('total-cyclists'), target: analytics.totalCyclists }
     ];
