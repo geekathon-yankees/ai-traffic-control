@@ -108,7 +108,7 @@ jobs:
           " || echo 'Failed to connect - continuing anyway'
       - name: Start backend application
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /app/ml-gateway/app.log 2>&1 &"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 > /app/ml-gateway/app.log 2>&1 &"
       - name: Wait for application to start
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
