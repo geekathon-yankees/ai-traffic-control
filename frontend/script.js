@@ -1,5 +1,5 @@
 // AI Traffic Dashboard JavaScript
-const API_BASE_URL = '184.73.137.40:8000';
+const API_BASE_URL = 'api.yankees.pt:8000';
 
 // Global variables
 let currentVideoData = null;
