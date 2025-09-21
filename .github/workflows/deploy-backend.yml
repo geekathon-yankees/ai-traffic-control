@@ -99,15 +99,17 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
             echo 'Stopping any existing backend processes...'
-            pkill -f 'uvicorn.*app.main:app' || echo 'No uvicorn processes found'
-            pkill -f 'python3.*main.py' || echo 'No main.py processes found'
+            sudo pkill -f 'uvicorn.*app.main:app' || echo 'No uvicorn processes found'
+            sudo pkill -f 'python3.*main.py' || echo 'No main.py processes found'
+            pkill -f 'uvicorn.*app.main:app' || echo 'No non-sudo uvicorn processes found'
+            pkill -f 'python3.*main.py' || echo 'No non-sudo main.py processes found'
             # Wait a moment for processes to stop
             sleep 2
             echo 'Process cleanup completed'
           " || echo 'Failed to connect - continuing anyway'
       - name: Start backend application
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 > /app/ml-gateway/app.log 2>&1 &"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "cd /app/ml-gateway && nohup sudo python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 > /app/ml-gateway/app.log 2>&1 &"
       - name: Wait for application to start
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
@@ -119,7 +121,10 @@ jobs:
               fi
               if [ \$i -eq 30 ]; then
                 echo 'Application failed to start within 30 seconds'
-                tail -20 /app/ml-gateway/app.log
+                echo 'Process status:'
+                ps aux | grep python3 | grep -v grep
+                echo 'App log:'
+                sudo tail -20 /app/ml-gateway/app.log || tail -20 /app/ml-gateway/app.log || echo 'Could not read log file'
                 exit 1
               fi
               echo 'Waiting... (\$i/30)'
@@ -141,7 +146,7 @@ jobs:
                 echo 'Process status:'
                 ps aux | grep python3 | grep -v grep
                 echo 'Last 30 lines of app log:'
-                tail -30 /app/ml-gateway/app.log
+                sudo tail -30 /app/ml-gateway/app.log || tail -30 /app/ml-gateway/app.log || echo 'Could not read log file'
                 exit 1
               fi
               echo 'Waiting for HTTP response... (\$i/20)'
@@ -150,7 +155,7 @@ jobs:
           "
       - name: Show application logs
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "tail -20 /app/ml-gateway/app.log || echo 'Log file not found'"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "sudo tail -20 /app/ml-gateway/app.log || tail -20 /app/ml-gateway/app.log || echo 'Log file not found'"
       - name: Final deployment status
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
