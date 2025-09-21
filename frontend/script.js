@@ -197,6 +197,9 @@ async function handleImageUpload(input) {
     // Clear previous analytics data for fresh results  
     clearAnalyticsForNewSession();
     
+    // Hide time series charts (only for videos)
+    hideTimeSeriesContainers();
+    
     try {
         const startTime = performance.now();
         
@@ -313,6 +316,9 @@ async function handleVideoUpload(input) {
         
         // Process unique detections as a single session
         processDetectionResults(uniqueDetections, true);
+        
+        // Generate and display time series charts for video
+        generateTimeSeriesCharts(result.results);
         
         // Store for later use
         currentVideoData = result;
@@ -1317,7 +1323,7 @@ checkAPIHealth();
 
 // Filter unwanted object detections
 function filterDetections(detections) {
-    const unwantedLabels = ['handbag', 'purse', 'bag', 'backpack', 'suitcase'];
+    const unwantedLabels = ['handbag', 'purse', 'bag', 'backpack', 'suitcase', 'parking meter'];
     
     const filteredDetections = detections.filter(detection => {
         const label = detection.label.toLowerCase();
@@ -1448,6 +1454,271 @@ function clusterDetectionsByLocation(detections, label) {
         return cluster.reduce((best, current) => 
             current.score > best.score ? current : best
         );
+    });
+}
+
+// Global storage for chart instances
+let timeSeriesCharts = {
+    vehicles: null,
+    pedestrians: null,
+    cyclists: null
+};
+
+// Generate time series charts for video data
+function generateTimeSeriesCharts(videoFrames) {
+    console.log('📊 Generating time series charts for video frames');
+    
+    // Extract time series data for each object type
+    const timeSeriesData = extractTimeSeriesData(videoFrames);
+    
+    // Create charts for each metric type
+    createTimeSeriesChart('vehicles', timeSeriesData.vehicles, '#3b82f6');
+    createTimeSeriesChart('pedestrians', timeSeriesData.pedestrians, '#10b981');  
+    createTimeSeriesChart('cyclists', timeSeriesData.cyclists, '#f59e0b');
+    
+    // Show the chart containers
+    showTimeSeriesContainers();
+}
+
+// Extract time series data from video frames
+function extractTimeSeriesData(videoFrames) {
+    const data = {
+        vehicles: [],
+        pedestrians: [],
+        cyclists: []
+    };
+    
+    const vehicleTypes = ['car', 'truck', 'bus', 'motorcycle'];
+    
+    videoFrames.forEach((frame, index) => {
+        const timestamp = frame.time_sec || (index * 0.033); // Assume 30fps if no timestamp
+        
+        // Count different object types in this frame
+        let vehicleCount = 0;
+        let pedestrianCount = 0;
+        let cyclistCount = 0;
+        
+        frame.detections.forEach(detection => {
+            const label = detection.label.toLowerCase();
+            
+            if (vehicleTypes.includes(label)) {
+                vehicleCount++;
+            } else if (label === 'person') {
+                pedestrianCount++;
+            } else if (label === 'bicycle') {
+                cyclistCount++;
+            }
+        });
+        
+        data.vehicles.push({ x: timestamp, y: vehicleCount });
+        data.pedestrians.push({ x: timestamp, y: pedestrianCount });
+        data.cyclists.push({ x: timestamp, y: cyclistCount });
+    });
+    
+    console.log('📊 Extracted time series data:', {
+        frames: videoFrames.length,
+        vehicles: data.vehicles.length,
+        pedestrians: data.pedestrians.length,
+        cyclists: data.cyclists.length
+    });
+    
+    return data;
+}
+
+// Create a time series chart for a specific metric type
+function createTimeSeriesChart(type, data, color) {
+    const canvas = document.getElementById(`${type}-timeseries-chart`);
+    if (!canvas) {
+        console.warn(`Canvas not found for ${type} time series chart`);
+        return;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (timeSeriesCharts[type]) {
+        timeSeriesCharts[type].destroy();
+    }
+    
+    // Clean up any existing custom tooltip
+    const existingTooltip = document.getElementById(`chartjs-tooltip-${type}`);
+    if (existingTooltip) {
+        existingTooltip.remove();
+    }
+    
+    // Calculate max value for Y-axis
+    const maxValue = Math.max(...data.map(point => point.y)) || 1;
+    const yAxisMax = Math.max(5, Math.ceil(maxValue * 1.2));
+    
+    timeSeriesCharts[type] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: type.charAt(0).toUpperCase() + type.slice(1),
+                data: data,
+                borderColor: color,
+                backgroundColor: color + '20',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                pointBackgroundColor: 'transparent',
+                pointBorderColor: 'transparent',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 6.25,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    enabled: false, // Disable built-in tooltip
+                    external: function(context) {
+                        // Custom external tooltip to avoid clipping
+                        const chart = context.chart;
+                        const tooltip = context.tooltip;
+                        
+                        // Get or create tooltip element
+                        let tooltipEl = document.getElementById(`chartjs-tooltip-${type}`);
+                        if (!tooltipEl) {
+                            tooltipEl = document.createElement('div');
+                            tooltipEl.id = `chartjs-tooltip-${type}`;
+                            tooltipEl.style.cssText = `
+                                opacity: 0;
+                                position: absolute;
+                                background: rgba(0, 0, 0, 0.8);
+                                color: white;
+                                border-radius: 4px;
+                                padding: 6px 8px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                pointer-events: none;
+                                transition: all 0.2s ease;
+                                z-index: 10000;
+                                border: 1px solid ${color};
+                                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                            `;
+                            document.body.appendChild(tooltipEl);
+                        }
+                        
+                        // Hide if no tooltip
+                        if (tooltip.opacity === 0) {
+                            tooltipEl.style.opacity = 0;
+                            return;
+                        }
+                        
+                        // Set text
+                        if (tooltip.body) {
+                            const data = tooltip.dataPoints[0];
+                            tooltipEl.innerHTML = `Time: ${data.parsed.x.toFixed(1)}s<br/>${type.charAt(0).toUpperCase() + type.slice(1)}: ${data.parsed.y}`;
+                        }
+                        
+                        // Position tooltip relative to document
+                        const canvasRect = chart.canvas.getBoundingClientRect();
+                        const x = canvasRect.left + tooltip.caretX + window.scrollX;
+                        const y = canvasRect.top + tooltip.caretY + window.scrollY - 50;
+                        
+                        tooltipEl.style.opacity = 1;
+                        tooltipEl.style.left = x + 'px';
+                        tooltipEl.style.top = y + 'px';
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    display: true,
+                    title: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        font: {
+                            size: 8
+                        },
+                        maxTicksLimit: 4
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
+                    }
+                },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    max: yAxisMax,
+                    title: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        font: {
+                            size: 8
+                        },
+                        stepSize: 1,
+                        maxTicksLimit: 3
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
+                    }
+                }
+            }
+        }
+    });
+    
+    console.log(`📊 Created ${type} time series chart with ${data.length} data points`);
+}
+
+// Show time series containers and add visual indicators
+function showTimeSeriesContainers() {
+    const types = ['vehicles', 'pedestrians', 'cyclists'];
+    
+    types.forEach(type => {
+        const container = document.getElementById(`${type}-timeseries-container`);
+        const card = container?.closest('.metric-card');
+        
+        if (container && card) {
+            container.style.display = 'block';
+            card.classList.add('has-timeseries');
+            console.log(`📊 Showing ${type} time series chart (hiding metric footer)`);
+        }
+    });
+}
+
+// Hide time series containers (for image uploads)
+function hideTimeSeriesContainers() {
+    const types = ['vehicles', 'pedestrians', 'cyclists'];
+    
+    types.forEach(type => {
+        const container = document.getElementById(`${type}-timeseries-container`);
+        const card = container?.closest('.metric-card');
+        
+        if (container && card) {
+            container.style.display = 'none';
+            card.classList.remove('has-timeseries');
+            console.log(`📊 Hiding ${type} time series chart (showing metric footer)`);
+        }
+        
+        // Destroy existing chart
+        if (timeSeriesCharts[type]) {
+            timeSeriesCharts[type].destroy();
+            timeSeriesCharts[type] = null;
+        }
+        
+        // Clean up custom tooltip
+        const tooltipEl = document.getElementById(`chartjs-tooltip-${type}`);
+        if (tooltipEl) {
+            tooltipEl.remove();
+        }
     });
 }
 
@@ -1681,6 +1952,17 @@ function clearAnalyticsForNewSession() {
             'person': 0, 'bicycle': 0, 'traffic light': 0, 'stop sign': 0
         },
         recentDetections: []
+    });
+    
+    // Hide time series charts when clearing session
+    hideTimeSeriesContainers();
+    
+    // Clean up any remaining custom tooltips
+    ['vehicles', 'pedestrians', 'cyclists'].forEach(type => {
+        const tooltipEl = document.getElementById(`chartjs-tooltip-${type}`);
+        if (tooltipEl) {
+            tooltipEl.remove();
+        }
     });
 }
 
