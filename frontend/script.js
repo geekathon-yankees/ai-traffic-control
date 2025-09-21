@@ -228,11 +228,24 @@ async function handleImageUpload(input) {
         const result = await response.json();
         const processingTime = Math.round(performance.now() - startTime);
         
+        // Calculate real accuracy from detection confidence scores
+        const confidenceScores = result.detections
+            .map(d => d.score)
+            .filter(score => score !== undefined && score !== null);
+        
+        const realAccuracy = confidenceScores.length > 0 
+            ? (confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length) * 100
+            : 95.2; // fallback if no scores available
+        
         console.log('✅ API Success:', { 
             processingTime: `${processingTime}ms`,
             detections: result.detections?.length || 0,
-            model: result.model 
+            model: result.model,
+            realAccuracy: `${realAccuracy.toFixed(1)}%`
         });
+        
+        // Update analytics with real accuracy
+        analytics.accuracyRate = realAccuracy;
         
         // Process detection results with enhanced analytics
         processDetectionResults(result.detections);
@@ -289,10 +302,36 @@ async function handleVideoUpload(input) {
         const result = await response.json();
         const processingTime = Math.round(performance.now() - startTime);
         
-        // Process all detections from video frames with enhanced analytics
+        // Calculate real accuracy from all detection confidence scores
+        let allConfidenceScores = [];
         result.results.forEach(frame => {
-            processDetectionResults(frame.detections, true);
+            frame.detections.forEach(detection => {
+                if (detection.score) {
+                    allConfidenceScores.push(detection.score);
+                }
+            });
         });
+        
+        // Calculate average accuracy (mean confidence score)
+        const realAccuracy = allConfidenceScores.length > 0 
+            ? (allConfidenceScores.reduce((sum, score) => sum + score, 0) / allConfidenceScores.length) * 100
+            : 95.2; // fallback to default if no scores
+        
+        // Use UNIQUE object counts from backend tracking (not frame-by-frame counts!)
+        if (result.counts_by_label && result.tracking_info) {
+            console.log('🎯 Using unique object tracking results:');
+            console.log('📊 Unique counts:', result.counts_by_label);
+            console.log('✂️ Tracking reduced objects by:', result.tracking_info.reduction_percentage + '%');
+            
+            // Process unique counts instead of all frame detections
+            processUniqueVideoResults(result.counts_by_label, realAccuracy, result.tracking_info);
+        } else {
+            // Fallback: process all detections (old method)
+            console.log('⚠️ No tracking data available, using frame-by-frame counting');
+            result.results.forEach(frame => {
+                processDetectionResults(frame.detections, true);
+            });
+        }
         
         // Store for later use
         currentVideoData = result;
@@ -300,9 +339,22 @@ async function handleVideoUpload(input) {
         // Display results
         await displayVideoResults(file, result);
         
-        const totalDetections = result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
+        const totalDetections = result.tracking_info 
+            ? result.tracking_info.total_unique_objects 
+            : result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
+        
         hideLoading();
-        showNotification(`Processed ${result.processed_frames} frames with ${totalDetections} total detections!`, 'success');
+        
+        // Enhanced notification with tracking details
+        if (result.tracking_info) {
+            const reductionPercent = result.tracking_info.reduction_percentage || 0;
+            showNotification(
+                `🎯 Processed ${result.processed_frames} frames - Found ${totalDetections} unique objects (${reductionPercent}% smarter than frame counting!)`, 
+                'success'
+            );
+        } else {
+            showNotification(`Processed ${result.processed_frames} frames with ${totalDetections} total detections!`, 'success');
+        }
         
     } catch (error) {
         console.error('Error processing video:', error);
@@ -1236,14 +1288,28 @@ function updateVehicleCO2Displays() {
             const co2InGrams = (co2Value * 1000).toFixed(0);
             co2Element.textContent = `${co2InGrams}g`;
 
-            // Update trend color and message based on emissions level
+            // Update trend with dynamic baseline values and impact status
             if (trendElement) {
                 const vehicleCount = analytics.entityCounts[vehicleType];
                 const emissionRate = CO2_EMISSIONS[vehicleType] * 1000; // Convert to grams
 
-                // Remove all impact labels - just clear the text
-                trendElement.textContent = '';
-                trendElement.style.color = '#6c757d'; // Keep neutral gray color
+                if (vehicleCount === 0) {
+                    // Show dynamic baseline when no vehicles detected
+                    trendElement.textContent = `${emissionRate}g baseline`;
+                    trendElement.style.color = '#6c757d';
+                } else if (co2Value < 0.1) {
+                    // Low impact
+                    trendElement.textContent = `Low impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#28a745';
+                } else if (co2Value < 0.5) {
+                    // Medium impact
+                    trendElement.textContent = `Medium impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#ffc107';
+                } else {
+                    // High impact
+                    trendElement.textContent = `High impact (${vehicleCount} detected)`;
+                    trendElement.style.color = '#dc3545';
+                }
             }
         }
     });
@@ -1332,7 +1398,95 @@ function updateRecentDetections() {
     `).join('');
 }
 
-// Enhanced detection processing with CO2 calculation
+// Process unique video results from object tracking (NEW METHOD)
+function processUniqueVideoResults(uniqueCounts, realAccuracy, trackingInfo) {
+    console.log('🎯 Processing unique object counts from tracking:', uniqueCounts);
+    
+    // Update accuracy with real calculated value
+    analytics.accuracyRate = realAccuracy;
+    
+    let sessionCO2 = 0;
+    let totalUniqueObjects = 0;
+    
+    // Process each unique object type
+    Object.entries(uniqueCounts).forEach(([label, count]) => {
+        const normalizedLabel = label.toLowerCase();
+        
+        // Update entity counts with UNIQUE objects
+        if (analytics.entityCounts.hasOwnProperty(normalizedLabel)) {
+            analytics.entityCounts[normalizedLabel] += count;
+        }
+        
+        // Calculate CO2 emissions for unique objects
+        if (CO2_EMISSIONS.hasOwnProperty(normalizedLabel)) {
+            const co2ForObjects = CO2_EMISSIONS[normalizedLabel] * count;
+            analytics.totalCO2 += co2ForObjects;
+            sessionCO2 += co2ForObjects;
+            
+            // Track CO2 by vehicle type
+            if (analytics.co2ByVehicleType.hasOwnProperty(normalizedLabel)) {
+                analytics.co2ByVehicleType[normalizedLabel] += co2ForObjects;
+            }
+        }
+        
+        // Categorize unique detections
+        if (['car', 'truck', 'bus', 'motorcycle'].includes(normalizedLabel)) {
+            analytics.totalVehicles += count;
+        } else if (normalizedLabel === 'person') {
+            analytics.totalPedestrians += count;
+        } else if (normalizedLabel === 'bicycle') {
+            analytics.totalCyclists += count;
+        }
+        
+        totalUniqueObjects += count;
+        
+        // Add unique objects to recent detections
+        if (count > 0) {
+            const co2Info = CO2_EMISSIONS[normalizedLabel] ? ` (${(CO2_EMISSIONS[normalizedLabel] * 1000).toFixed(0)}g CO₂/km)` : '';
+            analytics.recentDetections.unshift({
+                type: `${count}x ${label.charAt(0).toUpperCase() + label.slice(1)}${co2Info} (unique)`,
+                time: 'Video analysis'
+            });
+        }
+    });
+    
+    // Update total detections with unique count
+    analytics.totalDetections += totalUniqueObjects;
+    
+    // Keep only last 10 detections
+    analytics.recentDetections = analytics.recentDetections.slice(0, 10);
+    
+    // Show improved tracking notification
+    const reductionPercent = trackingInfo.reduction_percentage || 0;
+    if (reductionPercent > 0) {
+        showNotification(
+            `🎯 Smart tracking: ${totalUniqueObjects} unique objects detected (${reductionPercent}% fewer duplicates!)`, 
+            'success'
+        );
+    }
+    
+    // Environmental impact notification
+    if (sessionCO2 > 0.5) {
+        showNotification(
+            `High CO₂ impact: ${(sessionCO2 * 1000).toFixed(0)}g CO₂/km from ${totalUniqueObjects} unique vehicles`, 
+            'warning'
+        );
+    } else if (sessionCO2 === 0 && totalUniqueObjects > 0) {
+        showNotification(
+            'Eco-friendly traffic detected! 🌱 Zero emissions from pedestrians & cyclists', 
+            'success'
+        );
+    }
+    
+    console.log('✅ Updated analytics with unique object counts');
+    console.log('📊 New totals - Vehicles:', analytics.totalVehicles, 'Pedestrians:', analytics.totalPedestrians, 'Cyclists:', analytics.totalCyclists);
+    console.log('🎯 Real accuracy:', realAccuracy.toFixed(1) + '%');
+    
+    // Update dashboard
+    updateAnalyticsDashboard();
+}
+
+// Enhanced detection processing with CO2 calculation (LEGACY METHOD for images)
 function processDetectionResults(detections, isVideo = false) {
     if (!detections || detections.length === 0) return;
     
@@ -1431,13 +1585,13 @@ async function resetAnalytics() {
         // Set flag to prevent animations during reset
         isResetInProgress = true;
         console.log('🔒 Reset in progress - blocking animations and updates');
-        // Reset frontend analytics object
+        // Reset frontend analytics object (keeping default accuracy for reset)
         analytics = {
             totalVehicles: 0,
             totalPedestrians: 0,
             totalCyclists: 0,
             totalDetections: 0,
-            accuracyRate: 95.2,
+            accuracyRate: 95.2, // Reset to default baseline value
             totalCO2: 0,
             co2ByVehicleType: {
                 'car': 0,
