@@ -21,7 +21,7 @@
             <div class="nav-links">
                 <a href="#home">Home</a>
                 <a href="#demo">Demo</a>
-                <a href="#results">Results</a>
+                <a href="#results" id="results-nav-link" style="display: none;">Results</a>
                 <a href="#capabilities">Capabilities</a>
                 <a href="#system">System</a>
             </div>
@@ -171,7 +171,7 @@
     </div>
 
     <!-- Analytics Dashboard Section -->
-    <section id="results" class="analytics-section">
+    <section id="results" class="analytics-section" style="display: none;">
         <div class="container">
                 <div class="section-header">
                     <h2 class="section-title">
@@ -179,9 +179,6 @@
                         Real-Time Traffic Analytics
                     </h2>
                     <div class="section-controls">
-                        <button id="reset-analytics" class="reset-btn" title="Reset all analytics data and backend metrics to zero">
-                            <i class="fas fa-refresh"></i> Reset All Metrics
-                        </button>
                         <button id="export-analytics" class="export-btn" title="Export analytics as JSON">
                             <i class="fas fa-download"></i> Export
                         </button>
@@ -195,7 +192,7 @@
                 <div class="metrics-section">
                     <div class="section-header-mini">
                         <i class="fas fa-chart-line section-icon"></i>
-                        <h4>Live Detection Metrics</h4>
+                        <h4>Current Detection Results</h4>
                     </div>
                     <div class="primary-metrics-grid">
                         <div class="metric-card enhanced primary">
@@ -258,13 +255,13 @@
                                     <i class="fas fa-bullseye"></i>
                                 </div>
                                 <div class="metric-value">
-                                    <h3 id="accuracy-rate">95.2%</h3>
+                                    <h3 id="accuracy-rate">0.0%</h3>
                                     <span class="metric-label">AI Accuracy</span>
                                 </div>
                             </div>
                             <div class="metric-footer">
                                 <div class="progress-container">
-                                    <div class="progress-bar accuracy-progress" style="width: 95.2%"></div>
+                                    <div class="progress-bar accuracy-progress" id="accuracy-progress-bar"></div>
                                 </div>
                                 <span class="trend-indicator excellent"></span>
                             </div>
