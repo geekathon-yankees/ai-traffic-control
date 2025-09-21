@@ -16,7 +16,7 @@ Experience the AI traffic analysis in action with our live deployment! Upload yo
 
 ### Watch the AI Traffic Control System in Action
 
-> **📹 Demo Video Coming Soon!** - Upload your demo video to YouTube and update this section.
+[![AI Traffic Control Demo](https://img.youtube.com/vi/C_uY97OGfMo/maxresdefault.jpg)](https://youtu.be/C_uY97OGfMo)
 
 **What the system demonstrates:**
 - 🚗 **Real-time vehicle detection** - Cars, trucks, buses, motorcycles identified with precision
