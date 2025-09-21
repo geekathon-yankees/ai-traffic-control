@@ -49,7 +49,7 @@ jobs:
             # Clean package cache
             sudo yum clean all 2>/dev/null || sudo apt-get clean 2>/dev/null || true
             # Clean pip cache
-            python3 -m pip cache purge 2>/dev/null || true
+            sudo python3 -m pip cache purge 2>/dev/null || python3 -m pip cache purge 2>/dev/null || true
             # Clean temporary files
             sudo rm -rf /tmp/* 2>/dev/null || true
             sudo rm -rf /var/tmp/* 2>/dev/null || true
@@ -60,7 +60,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
             cd /app/ml-gateway && 
-            python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements.txt || {
+            sudo python3 -m pip install --no-cache-dir --progress-bar off -r requirements.txt || {
               echo 'Installation failed due to disk space, trying CPU-only PyTorch...'
               
               # Create CPU-only requirements by removing heavy GPU packages
@@ -79,10 +79,30 @@ jobs:
               echo 'psutil>=5.9.0' >> requirements_cpu.txt
               
               # Install CPU-only PyTorch from PyTorch index
-              python3 -m pip install --user --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
+              sudo python3 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
               # Install remaining requirements
-              python3 -m pip install --user --no-cache-dir --progress-bar off -r requirements_cpu.txt
+              sudo python3 -m pip install --no-cache-dir --progress-bar off -r requirements_cpu.txt
             }
+          "
+      - name: Verify Python packages installation
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
+            echo 'Verifying Python packages are installed and accessible...'
+            echo 'Testing uvicorn availability:'
+            if sudo python3 -c 'import uvicorn; print(\"✅ uvicorn available\")' 2>/dev/null; then
+              echo '✅ uvicorn is accessible with sudo'
+            else
+              echo '❌ uvicorn not accessible with sudo, checking regular user:'
+              python3 -c 'import uvicorn; print(\"✅ uvicorn available for user\")' 2>/dev/null || {
+                echo '❌ uvicorn not available for either sudo or user'
+                echo 'Available Python packages:'
+                sudo python3 -m pip list | grep -i uvicorn || echo 'uvicorn not found in pip list'
+                exit 1
+              }
+            fi
+            echo 'Testing other key packages:'
+            sudo python3 -c 'import fastapi, torch; print(\"✅ fastapi and torch available\")' || echo '⚠️ Some packages may not be available'
+            echo 'Package verification completed'
           "
       - name: Test SSH connection and debug
         run: |
@@ -186,6 +206,6 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST_BE }} "
             # Clean up pip cache and temp files after installation
-            python3 -m pip cache purge 2>/dev/null || true
+            sudo python3 -m pip cache purge 2>/dev/null || python3 -m pip cache purge 2>/dev/null || true
             sudo rm -rf /tmp/* 2>/dev/null || true
           "
