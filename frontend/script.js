@@ -1,10 +1,11 @@
 // AI Traffic Dashboard JavaScript
-const API_BASE_URL = 'http://184.73.137.40:8000';
+const API_BASE_URL = '184.73.137.40:8000';
 
 // Global variables
 let currentVideoData = null;
 let detectionColors = {};
 let colorIndex = 0;
+let isProcessingDragDrop = false; // Flag to prevent duplicate calls
 const colors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
     '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA'
@@ -16,7 +17,7 @@ let analytics = {
     totalPedestrians: 0,
     totalCyclists: 0,
     totalDetections: 0,
-    accuracyRate: 95.2,
+    accuracyRate: 0, // Will be calculated from real detection confidence scores
     totalCO2: 0, // Total CO2 emissions in kg/km
     co2ByVehicleType: {
         'car': 0,
@@ -81,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     loadPersistedData();
     startPerformanceMonitoring();
-    animateStats();
+    loadLastDetectionRun(); // Load real stats from last backend run
 });
 
 // Duplicate function removed - using enhanced version below
@@ -89,23 +90,20 @@ document.addEventListener('DOMContentLoaded', function() {
 function setupEventListeners() {
     // Image input change
     document.getElementById('image-input').addEventListener('change', (e) => {
-        if (e.target.files[0]) {
+        if (e.target.files[0] && !isProcessingDragDrop) {
             handleImageUpload(e.target);
         }
     });
     
     // Video input change
     document.getElementById('video-input').addEventListener('change', (e) => {
-        if (e.target.files[0]) {
+        if (e.target.files[0] && !isProcessingDragDrop) {
             handleVideoUpload(e.target);
         }
     });
     
     // Play detections button
     document.getElementById('play-detections').addEventListener('click', playVideoDetections);
-    
-    // Reset analytics button
-    document.getElementById('reset-analytics').addEventListener('click', resetAnalytics);
     
     // Export analytics button
     document.getElementById('export-analytics').addEventListener('click', exportAnalytics);
@@ -137,9 +135,17 @@ function setupDragAndDrop(elementId, handler) {
                 document.getElementById('image-input') : 
                 document.getElementById('video-input');
             
-            // Create a new FileList-like object
+            // Set flag to prevent duplicate calls from change event
+            isProcessingDragDrop = true;
+            
+            // Set files and call handler directly
             input.files = files;
             handler(input);
+            
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isProcessingDragDrop = false;
+            }, 500);
         }
     });
 }
@@ -197,6 +203,12 @@ async function handleImageUpload(input) {
     console.log('🚀 Starting image analysis...');
     showLoading('Analyzing image for objects...');
     
+    // Clear previous analytics data for fresh results  
+    clearAnalyticsForNewSession();
+    
+    // Hide time series charts (only for videos)
+    hideTimeSeriesContainers();
+    
     try {
         const startTime = performance.now();
         
@@ -244,8 +256,8 @@ async function handleImageUpload(input) {
             realAccuracy: `${realAccuracy.toFixed(1)}%`
         });
         
-        // Update analytics with real accuracy
-        analytics.accuracyRate = realAccuracy;
+        // Filter out unwanted detections (like handbags)
+        result.detections = filterDetections(result.detections);
         
         // Process detection results with enhanced analytics
         processDetectionResults(result.detections);
@@ -256,6 +268,14 @@ async function handleImageUpload(input) {
         hideLoading();
         showNotification(`Detected ${result.detections.length} objects in ${processingTime}ms!`, 'success');
         
+        // Show Results section and navigation tab after image upload (if detections found)
+        if (result.detections.length > 0) {
+            showResultsNavigation();
+        }
+        
+        // Refresh hero stats with latest detection run
+        setTimeout(() => loadLastDetectionRun(), 500);
+        
     } catch (error) {
         console.error('Error processing image:', error);
         hideLoading();
@@ -265,22 +285,36 @@ async function handleImageUpload(input) {
 
 // Video Upload Handler
 async function handleVideoUpload(input) {
+    // Additional safety check to prevent duplicate calls
+    if (input._processingVideo) {
+        return;
+    }
+    input._processingVideo = true;
+    
     const file = input.files[0];
-    if (!file) return;
+    if (!file) {
+        input._processingVideo = false;
+        return;
+    }
     
     // Validate file type
     if (!file.type.startsWith('video/')) {
         showNotification('Please select a valid video file', 'error');
+        input._processingVideo = false;
         return;
     }
     
     // Validate file size (50MB)
     if (file.size > 50 * 1024 * 1024) {
         showNotification('Video size must be less than 50MB', 'error');
+        input._processingVideo = false;
         return;
     }
     
     showLoading('Processing video frames...');
+    
+    // Clear previous analytics data for fresh results
+    clearAnalyticsForNewSession();
     
     try {
         const startTime = performance.now();
@@ -312,26 +346,23 @@ async function handleVideoUpload(input) {
             });
         });
         
-        // Calculate average accuracy (mean confidence score)
         const realAccuracy = allConfidenceScores.length > 0 
             ? (allConfidenceScores.reduce((sum, score) => sum + score, 0) / allConfidenceScores.length) * 100
             : 95.2; // fallback to default if no scores
         
-        // Use UNIQUE object counts from backend tracking (not frame-by-frame counts!)
-        if (result.counts_by_label && result.tracking_info) {
-            console.log('🎯 Using unique object tracking results:');
-            console.log('📊 Unique counts:', result.counts_by_label);
-            console.log('✂️ Tracking reduced objects by:', result.tracking_info.reduction_percentage + '%');
-            
-            // Process unique counts instead of all frame detections
-            processUniqueVideoResults(result.counts_by_label, realAccuracy, result.tracking_info);
-        } else {
-            // Fallback: process all detections (old method)
-            console.log('⚠️ No tracking data available, using frame-by-frame counting');
-            result.results.forEach(frame => {
-                processDetectionResults(frame.detections, true);
-            });
-        }
+        // Filter out unwanted detections from all video frames
+        result.results.forEach(frame => {
+            frame.detections = filterDetections(frame.detections);
+        });
+        
+        // Apply object tracking to avoid counting the same object multiple times across frames
+        const uniqueDetections = trackObjectsAcrossFrames(result.results);
+        
+        // Process unique detections as a single session
+        processDetectionResults(uniqueDetections, true);
+        
+        // Generate and display time series charts for video
+        generateTimeSeriesCharts(result.results);
         
         // Store for later use
         currentVideoData = result;
@@ -339,27 +370,35 @@ async function handleVideoUpload(input) {
         // Display results
         await displayVideoResults(file, result);
         
-        const totalDetections = result.tracking_info 
-            ? result.tracking_info.total_unique_objects 
-            : result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
+        // Calculate original vs unique detection counts for user feedback
+        const originalTotalDetections = result.results.reduce((sum, frame) => sum + frame.detections.length, 0);
+        const uniqueDetectionCount = uniqueDetections.length;
+        const duplicatesRemoved = originalTotalDetections - uniqueDetectionCount;
         
         hideLoading();
         
-        // Enhanced notification with tracking details
-        if (result.tracking_info) {
-            const reductionPercent = result.tracking_info.reduction_percentage || 0;
-            showNotification(
-                `🎯 Processed ${result.processed_frames} frames - Found ${totalDetections} unique objects (${reductionPercent}% smarter than frame counting!)`, 
-                'success'
-            );
+        if (duplicatesRemoved > 0) {
+            showNotification(`📹 Processed ${result.processed_frames} frames: Found ${uniqueDetectionCount} unique objects (${duplicatesRemoved} duplicates removed)`, 'success');
         } else {
-            showNotification(`Processed ${result.processed_frames} frames with ${totalDetections} total detections!`, 'success');
+            showNotification(`📹 Processed ${result.processed_frames} frames with ${uniqueDetectionCount} unique objects!`, 'success');
         }
+        
+        // Show Results section and navigation tab after video upload
+        showResultsNavigation();
+        
+        // Refresh hero stats with latest detection run
+        setTimeout(() => loadLastDetectionRun(), 500);
+        
+        // Reset processing flag
+        input._processingVideo = false;
         
     } catch (error) {
         console.error('Error processing video:', error);
         hideLoading();
         showNotification('Error processing video. Please make sure the ML Gateway is running.', 'error');
+        
+        // Reset processing flag in error case
+        input._processingVideo = false;
     }
 }
 
@@ -1224,6 +1263,97 @@ function animateStats() {
     }, 1000);
 }
 
+// Load Last Detection Run Data
+async function loadLastDetectionRun() {
+    try {
+        console.log('🔄 Loading last detection run data...');
+        const response = await fetch(`${API_BASE_URL}/metrics`);
+        
+        if (response.ok) {
+            const metrics = await response.json();
+            const lastRun = metrics.last_detection_run;
+            
+            console.log('📊 Last detection run data:', lastRun);
+            
+            // Update hero section stats with real data
+            updateHeroStats(lastRun);
+            
+        } else {
+            console.warn('⚠️ Could not fetch last detection run data');
+            // Fallback to demo data
+            animateStatsFallback();
+        }
+    } catch (error) {
+        console.warn('⚠️ Error loading last detection run:', error);
+        // Fallback to demo data
+        animateStatsFallback();
+    }
+}
+
+function updateHeroStats(lastRun) {
+    if (!lastRun || !lastRun.timestamp) {
+        console.log('📊 No previous detection runs found, showing demo data');
+        animateStatsFallback();
+        return;
+    }
+    
+    // Animate to real values from last detection run
+    const vehicleElement = document.getElementById('detected-vehicles');
+    const processingTimeElement = document.getElementById('processing-time');
+    const accuracyElement = document.getElementById('accuracy');
+    
+    if (vehicleElement) {
+        animateNumberTo(vehicleElement, lastRun.vehicles_detected, 2000);
+    }
+    
+    if (processingTimeElement) {
+        processingTimeElement.textContent = `${lastRun.processing_time_ms}ms`;
+    }
+    
+    if (accuracyElement) {
+        accuracyElement.textContent = `${lastRun.accuracy}%`;
+    }
+    
+    console.log('✅ Hero stats updated with last detection run:', {
+        vehicles: lastRun.vehicles_detected,
+        processingTime: `${lastRun.processing_time_ms}ms`,
+        accuracy: `${lastRun.accuracy}%`,
+        timestamp: lastRun.timestamp
+    });
+}
+
+function animateNumberTo(element, targetValue, duration = 2000) {
+    const startValue = parseInt(element.textContent) || 0;
+    const startTime = performance.now();
+    
+    function updateNumber(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing animation
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentValue = Math.round(startValue + (targetValue - startValue) * easeOut);
+        
+        element.textContent = currentValue;
+        
+        if (progress < 1) {
+            requestAnimationFrame(updateNumber);
+        }
+    }
+    
+    requestAnimationFrame(updateNumber);
+}
+
+// Fallback animation for when no backend data is available
+function animateStatsFallback() {
+    console.log('🎭 Using fallback demo animation');
+    // Use original demo animation
+    setTimeout(() => {
+        const vehicleElement = document.getElementById('detected-vehicles');
+        animateNumberTo(vehicleElement, 1247, 2000);
+    }, 1000);
+}
+
 // API Health Check
 async function checkAPIHealth() {
     try {
@@ -1241,6 +1371,485 @@ async function checkAPIHealth() {
 // Check API on load
 checkAPIHealth();
 
+// Filter unwanted object detections
+function filterDetections(detections) {
+    const unwantedLabels = ['handbag', 'purse', 'bag', 'backpack', 'suitcase', 'parking meter'];
+    
+    const filteredDetections = detections.filter(detection => {
+        const label = detection.label.toLowerCase();
+        const isUnwanted = unwantedLabels.some(unwanted => label.includes(unwanted));
+        
+        if (isUnwanted) {
+            console.log(`🚫 Filtered out: ${detection.label} (confidence: ${Math.round(detection.score * 100)}%)`);
+        }
+        
+        return !isUnwanted;
+    });
+    
+    if (filteredDetections.length !== detections.length) {
+        console.log(`🔍 Detection Filter: ${detections.length - filteredDetections.length} unwanted objects removed`);
+    }
+    
+    return filteredDetections;
+}
+
+// Track objects across video frames to avoid double counting
+function trackObjectsAcrossFrames(videoFrames) {
+    console.log(`🎯 Tracking objects across ${videoFrames.length} video frames`);
+    
+    // Collect all detections with frame info
+    const allDetections = [];
+    videoFrames.forEach((frame, frameIndex) => {
+        frame.detections.forEach(detection => {
+            allDetections.push({
+                ...detection,
+                frameIndex,
+                timestamp: frame.time_sec || frameIndex * 0.033 // Assume 30fps if no timestamp
+            });
+        });
+    });
+    
+    if (allDetections.length === 0) {
+        console.log('🎯 No detections to track');
+        return [];
+    }
+    
+    console.log(`🎯 Processing ${allDetections.length} total detections for tracking`);
+    
+    // Group detections by label
+    const detectionsByLabel = {};
+    allDetections.forEach(detection => {
+        const label = detection.label.toLowerCase();
+        if (!detectionsByLabel[label]) {
+            detectionsByLabel[label] = [];
+        }
+        detectionsByLabel[label].push(detection);
+    });
+    
+    const uniqueDetections = [];
+    
+    // Process each object type separately
+    Object.entries(detectionsByLabel).forEach(([label, detections]) => {
+        console.log(`🎯 Tracking ${detections.length} ${label} detections`);
+        
+        // Use spatial clustering to identify unique objects
+        const uniqueObjects = clusterDetectionsByLocation(detections, label);
+        uniqueDetections.push(...uniqueObjects);
+        
+        console.log(`🎯 Found ${uniqueObjects.length} unique ${label} objects (reduced from ${detections.length})`);
+    });
+    
+    const duplicatesRemoved = allDetections.length - uniqueDetections.length;
+    const reductionPercentage = allDetections.length > 0 ? (duplicatesRemoved / allDetections.length * 100).toFixed(1) : 0;
+    console.log(`🎯 Object tracking complete: ${allDetections.length} → ${uniqueDetections.length} unique objects (${reductionPercentage}% duplicates removed)`);
+    return uniqueDetections;
+}
+
+// Cluster detections by spatial proximity to identify unique objects
+function clusterDetectionsByLocation(detections, label) {
+    if (detections.length === 0) return [];
+    
+    // Calculate centroids for all detections
+    const detectionsWithCentroids = detections.map(detection => ({
+        ...detection,
+        centroid: {
+            x: (detection.bbox.x1 + detection.bbox.x2) / 2,
+            y: (detection.bbox.y1 + detection.bbox.y2) / 2
+        }
+    }));
+    
+    // Use different clustering thresholds based on object type
+    const clusterThresholds = {
+        'car': 150,     // Cars are larger, can tolerate more movement
+        'truck': 180,   // Trucks are even larger
+        'bus': 200,     // Buses are largest
+        'motorcycle': 100, // Motorcycles are smaller and move more
+        'bicycle': 80,  // Bicycles move more and are smaller
+        'person': 60    // People are smallest and move most
+    };
+    
+    const threshold = clusterThresholds[label] || 100; // Default threshold
+    
+    // Simple clustering algorithm: group nearby detections
+    const clusters = [];
+    const used = new Array(detectionsWithCentroids.length).fill(false);
+    
+    for (let i = 0; i < detectionsWithCentroids.length; i++) {
+        if (used[i]) continue;
+        
+        const cluster = [detectionsWithCentroids[i]];
+        used[i] = true;
+        
+        // Find all other detections within threshold distance
+        for (let j = i + 1; j < detectionsWithCentroids.length; j++) {
+            if (used[j]) continue;
+            
+            const distance = Math.sqrt(
+                Math.pow(detectionsWithCentroids[i].centroid.x - detectionsWithCentroids[j].centroid.x, 2) +
+                Math.pow(detectionsWithCentroids[i].centroid.y - detectionsWithCentroids[j].centroid.y, 2)
+            );
+            
+            if (distance <= threshold) {
+                cluster.push(detectionsWithCentroids[j]);
+                used[j] = true;
+            }
+        }
+        
+        clusters.push(cluster);
+    }
+    
+    // Return the best representative from each cluster
+    return clusters.map(cluster => {
+        // Use the detection with highest confidence as representative
+        return cluster.reduce((best, current) => 
+            current.score > best.score ? current : best
+        );
+    });
+}
+
+// Global storage for chart instances
+let timeSeriesCharts = {
+    vehicles: null,
+    pedestrians: null,
+    cyclists: null
+};
+
+// Generate time series charts for video data
+function generateTimeSeriesCharts(videoFrames) {
+    console.log('📊 Generating time series charts for video frames');
+    
+    // Extract time series data for each object type
+    const timeSeriesData = extractTimeSeriesData(videoFrames);
+    
+    // Create charts for each metric type
+    createTimeSeriesChart('vehicles', timeSeriesData.vehicles, '#3b82f6');
+    createTimeSeriesChart('pedestrians', timeSeriesData.pedestrians, '#10b981');  
+    createTimeSeriesChart('cyclists', timeSeriesData.cyclists, '#f59e0b');
+    
+    // Show the chart containers
+    showTimeSeriesContainers();
+}
+
+// Extract time series data from video frames
+function extractTimeSeriesData(videoFrames) {
+    const data = {
+        vehicles: [],
+        pedestrians: [],
+        cyclists: []
+    };
+    
+    const vehicleTypes = ['car', 'truck', 'bus', 'motorcycle'];
+    
+    videoFrames.forEach((frame, index) => {
+        const timestamp = frame.time_sec || (index * 0.033); // Assume 30fps if no timestamp
+        
+        // Count different object types in this frame
+        let vehicleCount = 0;
+        let pedestrianCount = 0;
+        let cyclistCount = 0;
+        
+        frame.detections.forEach(detection => {
+            const label = detection.label.toLowerCase();
+            
+            if (vehicleTypes.includes(label)) {
+                vehicleCount++;
+            } else if (label === 'person') {
+                pedestrianCount++;
+            } else if (label === 'bicycle') {
+                cyclistCount++;
+            }
+        });
+        
+        data.vehicles.push({ x: timestamp, y: vehicleCount });
+        data.pedestrians.push({ x: timestamp, y: pedestrianCount });
+        data.cyclists.push({ x: timestamp, y: cyclistCount });
+    });
+    
+    console.log('📊 Extracted time series data:', {
+        frames: videoFrames.length,
+        vehicles: data.vehicles.length,
+        pedestrians: data.pedestrians.length,
+        cyclists: data.cyclists.length
+    });
+    
+    return data;
+}
+
+// Create a time series chart for a specific metric type
+function createTimeSeriesChart(type, data, color) {
+    const canvas = document.getElementById(`${type}-timeseries-chart`);
+    if (!canvas) {
+        console.warn(`Canvas not found for ${type} time series chart`);
+        return;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (timeSeriesCharts[type]) {
+        timeSeriesCharts[type].destroy();
+    }
+    
+    // Clean up any existing custom tooltip
+    const existingTooltip = document.getElementById(`chartjs-tooltip-${type}`);
+    if (existingTooltip) {
+        existingTooltip.remove();
+    }
+    
+    // Calculate max value for Y-axis
+    const maxValue = Math.max(...data.map(point => point.y)) || 1;
+    const yAxisMax = Math.max(5, Math.ceil(maxValue * 1.2));
+    
+    timeSeriesCharts[type] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: type.charAt(0).toUpperCase() + type.slice(1),
+                data: data,
+                borderColor: color,
+                backgroundColor: color + '20',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                pointBackgroundColor: 'transparent',
+                pointBorderColor: 'transparent',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 6.25,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    enabled: false, // Disable built-in tooltip
+                    external: function(context) {
+                        // Custom external tooltip to avoid clipping
+                        const chart = context.chart;
+                        const tooltip = context.tooltip;
+                        
+                        // Get or create tooltip element
+                        let tooltipEl = document.getElementById(`chartjs-tooltip-${type}`);
+                        if (!tooltipEl) {
+                            tooltipEl = document.createElement('div');
+                            tooltipEl.id = `chartjs-tooltip-${type}`;
+                            tooltipEl.style.cssText = `
+                                opacity: 0;
+                                position: absolute;
+                                background: rgba(0, 0, 0, 0.8);
+                                color: white;
+                                border-radius: 4px;
+                                padding: 6px 8px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                pointer-events: none;
+                                transition: all 0.2s ease;
+                                z-index: 10000;
+                                border: 1px solid ${color};
+                                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                            `;
+                            document.body.appendChild(tooltipEl);
+                        }
+                        
+                        // Hide if no tooltip
+                        if (tooltip.opacity === 0) {
+                            tooltipEl.style.opacity = 0;
+                            return;
+                        }
+                        
+                        // Set text
+                        if (tooltip.body) {
+                            const data = tooltip.dataPoints[0];
+                            tooltipEl.innerHTML = `Time: ${data.parsed.x.toFixed(1)}s<br/>${type.charAt(0).toUpperCase() + type.slice(1)}: ${data.parsed.y}`;
+                        }
+                        
+                        // Position tooltip relative to document
+                        const canvasRect = chart.canvas.getBoundingClientRect();
+                        const x = canvasRect.left + tooltip.caretX + window.scrollX;
+                        const y = canvasRect.top + tooltip.caretY + window.scrollY - 50;
+                        
+                        tooltipEl.style.opacity = 1;
+                        tooltipEl.style.left = x + 'px';
+                        tooltipEl.style.top = y + 'px';
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    display: true,
+                    title: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        font: {
+                            size: 8
+                        },
+                        maxTicksLimit: 4
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
+                    }
+                },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    max: yAxisMax,
+                    title: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        font: {
+                            size: 8
+                        },
+                        stepSize: 1,
+                        maxTicksLimit: 3
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
+                    }
+                }
+            }
+        }
+    });
+    
+    console.log(`📊 Created ${type} time series chart with ${data.length} data points`);
+}
+
+// Show time series containers and add visual indicators
+function showTimeSeriesContainers() {
+    const types = ['vehicles', 'pedestrians', 'cyclists'];
+    
+    types.forEach(type => {
+        const container = document.getElementById(`${type}-timeseries-container`);
+        const card = container?.closest('.metric-card');
+        
+        if (container && card) {
+            container.style.display = 'block';
+            card.classList.add('has-timeseries');
+            console.log(`📊 Showing ${type} time series chart (hiding metric footer)`);
+        }
+    });
+}
+
+// Hide time series containers (for image uploads)
+function hideTimeSeriesContainers() {
+    const types = ['vehicles', 'pedestrians', 'cyclists'];
+    
+    types.forEach(type => {
+        const container = document.getElementById(`${type}-timeseries-container`);
+        const card = container?.closest('.metric-card');
+        
+        if (container && card) {
+            container.style.display = 'none';
+            card.classList.remove('has-timeseries');
+            console.log(`📊 Hiding ${type} time series chart (showing metric footer)`);
+        }
+        
+        // Destroy existing chart
+        if (timeSeriesCharts[type]) {
+            timeSeriesCharts[type].destroy();
+            timeSeriesCharts[type] = null;
+        }
+        
+        // Clean up custom tooltip
+        const tooltipEl = document.getElementById(`chartjs-tooltip-${type}`);
+        if (tooltipEl) {
+            tooltipEl.remove();
+        }
+    });
+}
+
+// Show Results Section and Navigation Tab
+function showResultsNavigation() {
+    const resultsNavLink = document.getElementById('results-nav-link');
+    const resultsSection = document.getElementById('results');
+    
+    // Show the Results navigation tab
+    if (resultsNavLink) {
+        // Show the Results tab with a smooth animation
+        resultsNavLink.style.display = 'block';
+        resultsNavLink.style.opacity = '0';
+        resultsNavLink.style.transform = 'translateY(-10px)';
+        
+        // Animate in
+        setTimeout(() => {
+            resultsNavLink.style.transition = 'all 0.3s ease';
+            resultsNavLink.style.opacity = '1';
+            resultsNavLink.style.transform = 'translateY(0)';
+        }, 100);
+        
+        // Add a subtle notification badge
+        if (!resultsNavLink.querySelector('.nav-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'nav-badge';
+            badge.textContent = 'NEW';
+            badge.style.cssText = `
+                position: absolute;
+                top: -8px;
+                right: -12px;
+                background: #ff4757;
+                color: white;
+                font-size: 0.7rem;
+                font-weight: 600;
+                padding: 2px 6px;
+                border-radius: 10px;
+                animation: pulse 2s infinite;
+            `;
+            resultsNavLink.style.position = 'relative';
+            resultsNavLink.appendChild(badge);
+            
+            // Remove badge after 5 seconds
+            setTimeout(() => {
+                if (badge.parentNode) {
+                    badge.style.animation = 'fadeOut 0.5s ease';
+                    setTimeout(() => {
+                        if (badge.parentNode) {
+                            badge.parentNode.removeChild(badge);
+                        }
+                    }, 500);
+                }
+            }, 5000);
+        }
+    }
+    
+    // Show the entire Results section
+    if (resultsSection) {
+        resultsSection.style.display = 'block';
+        resultsSection.style.opacity = '0';
+        resultsSection.style.transform = 'translateY(20px)';
+        
+        // Animate the section in with a slight delay
+        setTimeout(() => {
+            resultsSection.style.transition = 'all 0.5s ease';
+            resultsSection.style.opacity = '1';
+            resultsSection.style.transform = 'translateY(0)';
+        }, 200);
+        
+        console.log('✅ Results section and navigation tab shown after video upload');
+        
+        // Auto-scroll to the results section after it's shown
+        setTimeout(() => {
+            resultsSection.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }, 700);
+    }
+}
+
 // Enhanced Analytics Functions
 
 
@@ -1253,17 +1862,25 @@ function initializeCharts() {
 
 
 function updateAnalyticsDashboard() {
-    // Don't update during reset
-    if (isResetInProgress) {
-        console.log('🚫 Skipping updateAnalyticsDashboard - reset in progress');
-        return;
-    }
     
-    // Update metric cards
+    // Update metric cards with real analytics data from model analysis
     document.getElementById('total-vehicles').textContent = analytics.totalVehicles;
     document.getElementById('total-pedestrians').textContent = analytics.totalPedestrians;
     document.getElementById('total-cyclists').textContent = analytics.totalCyclists;
     document.getElementById('accuracy-rate').textContent = `${analytics.accuracyRate.toFixed(1)}%`;
+    
+    // Update accuracy progress bar
+    const accuracyProgressBar = document.getElementById('accuracy-progress-bar');
+    if (accuracyProgressBar) {
+        accuracyProgressBar.style.width = `${Math.max(0, Math.min(100, analytics.accuracyRate))}%`;
+    }
+    
+    console.log('📊 Current Detection Results Displayed:', {
+        vehicles: analytics.totalVehicles,
+        pedestrians: analytics.totalPedestrians,
+        cyclists: analytics.totalCyclists,
+        accuracy: `${analytics.accuracyRate.toFixed(1)}%`
+    });
     
     // Update CO2 metrics by vehicle type
     updateVehicleCO2Displays();
@@ -1363,130 +1980,57 @@ function updateRecentDetections() {
     const recentList = document.getElementById('recent-detections-list');
     if (!recentList) return;
     
-    // Add demo data if no real data exists
-    if (analytics.recentDetections.length === 0) {
-        // Add some demo CO₂ data for each vehicle type
-        analytics.co2ByVehicleType.car = 0.24; // 2 cars
-        analytics.co2ByVehicleType.truck = 0.85; // 1 truck
-        analytics.co2ByVehicleType.bus = 1.28; // 2 buses
-        analytics.entityCounts.car = 2;
-        analytics.entityCounts.truck = 1;
-        analytics.entityCounts.bus = 2;
-        analytics.entityCounts.person = 3;
-        analytics.entityCounts.bicycle = 1;
-        analytics.totalVehicles = 5;
-        analytics.totalPedestrians = 3;
-        analytics.totalCyclists = 1;
-        
-        analytics.recentDetections = [
-            { type: 'Car (120g CO₂/km)', time: '2 min ago' },
-            { type: 'Pedestrian (0g CO₂/km)', time: '3 min ago' },
-            { type: 'Truck (850g CO₂/km)', time: '5 min ago' },
-            { type: 'Bicycle (0g CO₂/km)', time: '7 min ago' },
-            { type: 'Bus (640g CO₂/km)', time: '12 min ago' }
-        ];
-        
-        // Update the displays with demo data
-        updateVehicleCO2Displays();
+    // Only show demo data if no real data exists AND no detection has been processed
+    if (analytics.recentDetections.length === 0 && analytics.totalDetections === 0) {
+        recentList.innerHTML = `
+            <div class="detection-item" style="text-align: center; color: #666; font-style: italic;">
+                <span class="detection-type">Upload an image or video to see detection results</span>
+                <span class="detection-time"></span>
+            </div>
+        `;
+    } else {
+        recentList.innerHTML = analytics.recentDetections.map(detection => `
+            <div class="detection-item">
+                <span class="detection-type">${detection.type}</span>
+                <span class="detection-time">${detection.time}</span>
+            </div>
+        `).join('');
     }
-    
-    recentList.innerHTML = analytics.recentDetections.map(detection => `
-        <div class="detection-item">
-            <span class="detection-type">${detection.type}</span>
-            <span class="detection-time">${detection.time}</span>
-        </div>
-    `).join('');
 }
 
-// Process unique video results from object tracking (NEW METHOD)
-function processUniqueVideoResults(uniqueCounts, realAccuracy, trackingInfo) {
-    console.log('🎯 Processing unique object counts from tracking:', uniqueCounts);
+// Clear analytics data for a new upload session
+function clearAnalyticsForNewSession() {
+    console.log('🧹 Clearing analytics for new detection session');
     
-    // Update accuracy with real calculated value
-    analytics.accuracyRate = realAccuracy;
-    
-    let sessionCO2 = 0;
-    let totalUniqueObjects = 0;
-    
-    // Process each unique object type
-    Object.entries(uniqueCounts).forEach(([label, count]) => {
-        const normalizedLabel = label.toLowerCase();
-        
-        // Update entity counts with UNIQUE objects
-        if (analytics.entityCounts.hasOwnProperty(normalizedLabel)) {
-            analytics.entityCounts[normalizedLabel] += count;
-        }
-        
-        // Calculate CO2 emissions for unique objects
-        if (CO2_EMISSIONS.hasOwnProperty(normalizedLabel)) {
-            const co2ForObjects = CO2_EMISSIONS[normalizedLabel] * count;
-            analytics.totalCO2 += co2ForObjects;
-            sessionCO2 += co2ForObjects;
-            
-            // Track CO2 by vehicle type
-            if (analytics.co2ByVehicleType.hasOwnProperty(normalizedLabel)) {
-                analytics.co2ByVehicleType[normalizedLabel] += co2ForObjects;
-            }
-        }
-        
-        // Categorize unique detections
-        if (['car', 'truck', 'bus', 'motorcycle'].includes(normalizedLabel)) {
-            analytics.totalVehicles += count;
-        } else if (normalizedLabel === 'person') {
-            analytics.totalPedestrians += count;
-        } else if (normalizedLabel === 'bicycle') {
-            analytics.totalCyclists += count;
-        }
-        
-        totalUniqueObjects += count;
-        
-        // Add unique objects to recent detections
-        if (count > 0) {
-            const co2Info = CO2_EMISSIONS[normalizedLabel] ? ` (${(CO2_EMISSIONS[normalizedLabel] * 1000).toFixed(0)}g CO₂/km)` : '';
-            analytics.recentDetections.unshift({
-                type: `${count}x ${label.charAt(0).toUpperCase() + label.slice(1)}${co2Info} (unique)`,
-                time: 'Video analysis'
-            });
-        }
+    // Reset all counters to zero
+    Object.assign(analytics, {
+        totalVehicles: 0,
+        totalPedestrians: 0, 
+        totalCyclists: 0,
+        totalCO2: 0,
+        totalDetections: 0,
+        accuracyRate: 0,
+        co2ByVehicleType: { 'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0 },
+        entityCounts: {
+            'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
+            'person': 0, 'bicycle': 0, 'traffic light': 0, 'stop sign': 0
+        },
+        recentDetections: []
     });
     
-    // Update total detections with unique count
-    analytics.totalDetections += totalUniqueObjects;
+    // Hide time series charts when clearing session
+    hideTimeSeriesContainers();
     
-    // Keep only last 10 detections
-    analytics.recentDetections = analytics.recentDetections.slice(0, 10);
-    
-    // Show improved tracking notification
-    const reductionPercent = trackingInfo.reduction_percentage || 0;
-    if (reductionPercent > 0) {
-        showNotification(
-            `🎯 Smart tracking: ${totalUniqueObjects} unique objects detected (${reductionPercent}% fewer duplicates!)`, 
-            'success'
-        );
-    }
-    
-    // Environmental impact notification
-    if (sessionCO2 > 0.5) {
-        showNotification(
-            `High CO₂ impact: ${(sessionCO2 * 1000).toFixed(0)}g CO₂/km from ${totalUniqueObjects} unique vehicles`, 
-            'warning'
-        );
-    } else if (sessionCO2 === 0 && totalUniqueObjects > 0) {
-        showNotification(
-            'Eco-friendly traffic detected! 🌱 Zero emissions from pedestrians & cyclists', 
-            'success'
-        );
-    }
-    
-    console.log('✅ Updated analytics with unique object counts');
-    console.log('📊 New totals - Vehicles:', analytics.totalVehicles, 'Pedestrians:', analytics.totalPedestrians, 'Cyclists:', analytics.totalCyclists);
-    console.log('🎯 Real accuracy:', realAccuracy.toFixed(1) + '%');
-    
-    // Update dashboard
-    updateAnalyticsDashboard();
+    // Clean up any remaining custom tooltips
+    ['vehicles', 'pedestrians', 'cyclists'].forEach(type => {
+        const tooltipEl = document.getElementById(`chartjs-tooltip-${type}`);
+        if (tooltipEl) {
+            tooltipEl.remove();
+        }
+    });
 }
 
-// Enhanced detection processing with CO2 calculation (LEGACY METHOD for images)
+// Enhanced detection processing with CO2 calculation  
 function processDetectionResults(detections, isVideo = false) {
     if (!detections || detections.length === 0) return;
     
@@ -1495,7 +2039,7 @@ function processDetectionResults(detections, isVideo = false) {
     detections.forEach(detection => {
         const label = detection.label.toLowerCase();
         
-        // Update entity counts
+        // Update entity counts for current session
         if (analytics.entityCounts.hasOwnProperty(label)) {
             analytics.entityCounts[label]++;
         }
@@ -1506,13 +2050,13 @@ function processDetectionResults(detections, isVideo = false) {
             analytics.totalCO2 += co2ForVehicle;
             sessionCO2 += co2ForVehicle;
             
-            // Track CO2 by vehicle type
+            // Track CO2 by vehicle type for current session
             if (analytics.co2ByVehicleType.hasOwnProperty(label)) {
                 analytics.co2ByVehicleType[label] += co2ForVehicle;
             }
         }
         
-        // Categorize detections
+        // Categorize detections for current session
         if (['car', 'truck', 'bus', 'motorcycle'].includes(label)) {
             analytics.totalVehicles++;
         } else if (label === 'person') {
@@ -1521,20 +2065,47 @@ function processDetectionResults(detections, isVideo = false) {
             analytics.totalCyclists++;
         }
         
-        // Add to recent detections with CO2 info
+        // Add to current session detections with CO2 info
         const co2Info = CO2_EMISSIONS[label] ? ` (${(CO2_EMISSIONS[label] * 1000).toFixed(0)}g CO₂/km)` : '';
+        if (analytics.recentDetections.length === 0 || 
+            analytics.recentDetections[0].time !== 'Current Upload') {
+            // Reset recent detections for new upload
+            analytics.recentDetections = [];
+        }
         analytics.recentDetections.unshift({
             type: `${label.charAt(0).toUpperCase() + label.slice(1)}${co2Info}`,
-            time: 'Just now'
+            time: 'Current Upload'
         });
-        
-        // Keep only last 10 detections
-        if (analytics.recentDetections.length > 10) {
-            analytics.recentDetections.pop();
-        }
     });
     
-    analytics.totalDetections += detections.length;
+    analytics.totalDetections = detections.length; // Set to current session total
+    
+    // Calculate real AI accuracy from detection confidence scores
+    if (detections.length > 0) {
+        const totalConfidence = detections.reduce((sum, detection) => sum + (detection.score || 0), 0);
+        const sessionAccuracy = (totalConfidence / detections.length) * 100;
+        
+        // Update overall accuracy (weighted average with previous detections)
+        const previousWeight = Math.max(0, analytics.totalDetections - detections.length);
+        const newWeight = detections.length;
+        
+        if (previousWeight > 0) {
+            analytics.accuracyRate = (
+                (analytics.accuracyRate * previousWeight + sessionAccuracy * newWeight) / 
+                (previousWeight + newWeight)
+            );
+        } else {
+            analytics.accuracyRate = sessionAccuracy;
+        }
+        
+        console.log('🎯 Current Detection Session Results:', {
+            currentSessionAccuracy: `${sessionAccuracy.toFixed(1)}%`,
+            vehicles: analytics.totalVehicles,
+            pedestrians: analytics.totalPedestrians, 
+            cyclists: analytics.totalCyclists,
+            totalDetections: detections.length
+        });
+    }
     
     // Show CO2 impact notification for significant emissions
     if (sessionCO2 > 0.5) {
@@ -1580,188 +2151,6 @@ function initializeApp() {
 
 // Enhanced functionality for data management and performance monitoring
 
-async function resetAnalytics() {
-    if (confirm('🔄 Are you sure you want to reset ALL analytics data and backend metrics? This action cannot be undone.')) {
-        // Set flag to prevent animations during reset
-        isResetInProgress = true;
-        console.log('🔒 Reset in progress - blocking animations and updates');
-        // Reset frontend analytics object (keeping default accuracy for reset)
-        analytics = {
-            totalVehicles: 0,
-            totalPedestrians: 0,
-            totalCyclists: 0,
-            totalDetections: 0,
-            accuracyRate: 95.2, // Reset to default baseline value
-            totalCO2: 0,
-            co2ByVehicleType: {
-                'car': 0,
-                'truck': 0, 
-                'bus': 0,
-                'motorcycle': 0
-            },
-            recentDetections: [],
-            entityCounts: {
-                'car': 0, 'truck': 0, 'bus': 0, 'motorcycle': 0,
-                'person': 0, 'bicycle': 0, 'traffic light': 0, 'stop sign': 0
-            }
-        };
-        
-        // Clear localStorage completely
-        localStorage.removeItem('trafficAnalytics');
-        
-        // Debug: Log current analytics state
-        console.log('🔍 Analytics state after reset:', JSON.stringify(analytics, null, 2));
-        
-        // Reset backend metrics via API call
-        try {
-            showNotification('🔄 Resetting all metrics...', 'info');
-            
-            const response = await fetch(`${API_BASE_URL}/metrics/reset`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                console.log('🔄 Backend metrics reset successfully:', result);
-                showNotification('✅ All analytics data and backend metrics reset to zero!', 'success');
-            } else {
-                console.warn('Failed to reset backend metrics');
-                showNotification('⚠️ Frontend reset. Backend metrics may not have reset.', 'warning');
-            }
-        } catch (error) {
-            console.error('Error resetting backend metrics:', error);
-            showNotification('⚠️ Frontend reset. Backend unavailable.', 'warning');
-        }
-        
-        // Force update all dashboard elements immediately
-        updateAnalyticsDashboard();
-        updateEnhancedDashboard();
-        
-        // Reset performance metrics display
-        if (typeof updatePerformanceMetrics === 'function') {
-            updatePerformanceMetrics();
-        }
-        
-        // Force reset specific dashboard elements by their exact IDs
-        const elementsToReset = {
-            'total-vehicles': '0',
-            'total-pedestrians': '0', 
-            'total-cyclists': '0',
-            'co2-car': '0g',
-            'co2-truck': '0g',
-            'co2-bus': '0g'
-            // Note: accuracy-rate stays at 95.2%
-        };
-        
-        console.log('🔍 DEBUG: Starting element reset process...');
-        
-        Object.entries(elementsToReset).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (element) {
-                console.log('🔄 Found element:', id, 'Current:', element.textContent, 'Setting to:', value);
-                element.textContent = value;
-                element.innerHTML = value; // Also try innerHTML in case textContent doesn't work
-                
-                // Verify the change was applied
-                setTimeout(() => {
-                    console.log('✅ Verification for', id, '- Current value:', element.textContent);
-                }, 100);
-            } else {
-                console.warn('⚠️ Element not found:', id);
-                
-                // Try alternative search methods
-                const byClass = document.querySelector(`#${id}`);
-                const h3Elements = document.querySelectorAll('h3');
-                console.log('🔍 Alternative search results:');
-                console.log('- By querySelector:', byClass);
-                console.log('- All h3 elements:', Array.from(h3Elements).map(h => ({id: h.id, content: h.textContent})));
-            }
-        });
-        
-        // More aggressive reset approach
-        console.log('🔄 Trying aggressive reset of all number displays...');
-        document.querySelectorAll('h3').forEach((h3, index) => {
-            if (h3.textContent && /^\d+$/.test(h3.textContent.trim()) && !h3.textContent.includes('%')) {
-                console.log(`🔄 Aggressive reset h3[${index}]:`, h3.id, h3.textContent, '→ 0');
-                h3.textContent = '0';
-                h3.innerHTML = '0';
-            }
-        });
-        
-        // Clear any trend indicators  
-        document.querySelectorAll('.metric-footer .trend-indicator').forEach(el => {
-            if (!el.classList.contains('excellent')) {
-                el.textContent = '';
-            }
-        });
-        
-        // Clear environmental footers too
-        document.querySelectorAll('.environmental-footer').forEach(el => {
-            el.textContent = '';
-        });
-        
-        // Hide results
-        document.getElementById('image-results').style.display = 'none';
-        document.getElementById('video-results').style.display = 'none';
-        
-        // Add a small delay to ensure all operations complete, then force one more update
-        setTimeout(() => {
-            console.log('🔄 Final cleanup after reset...');
-            
-            // Check analytics state before final update
-            console.log('🔍 Analytics state before final update:', JSON.stringify(analytics, null, 2));
-            
-            // DON'T call updateEnhancedDashboard() as it might override our manual reset
-            // updateEnhancedDashboard();
-            
-            // One more direct reset to be absolutely sure using the same approach
-            const finalReset = {
-                'total-vehicles': '0',
-                'total-pedestrians': '0', 
-                'total-cyclists': '0',
-                'co2-car': '0g',
-                'co2-truck': '0g',
-                'co2-bus': '0g'
-            };
-            
-            console.log('🔄 Final direct DOM manipulation...');
-            Object.entries(finalReset).forEach(([id, value]) => {
-                const element = document.getElementById(id);
-                if (element) {
-                    console.log('🔧 Final reset:', id, element.textContent, '→', value);
-                    element.textContent = value;
-                    element.innerHTML = value;
-                    
-                    // Force style update
-                    element.style.color = '#333';
-                    element.setAttribute('data-reset', 'true');
-                }
-            });
-            
-            // Check if there are any event listeners or intervals that might be updating the values
-            console.log('🔍 Checking for any running intervals or pending updates...');
-            
-            // Clear all trend indicators and footers after final reset
-            document.querySelectorAll('.trend-indicator').forEach(el => {
-                if (!el.classList.contains('excellent')) {
-                    el.textContent = '';
-                }
-            });
-            document.querySelectorAll('.environmental-footer').forEach(el => {
-                el.textContent = '';
-            });
-            
-            // Clear the reset flag to allow normal operations
-            isResetInProgress = false;
-            console.log('🔓 Reset complete - re-enabling animations and updates');
-            
-            console.log('✅ Analytics reset complete - all data should be zero');
-        }, 500);
-    }
-}
 
 function exportAnalytics() {
     const exportData = {
@@ -1794,6 +2183,23 @@ function loadPersistedData() {
             const data = JSON.parse(saved);
             Object.assign(analytics, data);
             console.log('📊 Loaded persisted analytics data');
+            
+            // Show Results tab and section if we have persisted data with detections
+            if (data.totalDetections && data.totalDetections > 0) {
+                setTimeout(() => {
+                    const resultsNavLink = document.getElementById('results-nav-link');
+                    const resultsSection = document.getElementById('results');
+                    
+                    if (resultsNavLink) {
+                        resultsNavLink.style.display = 'block';
+                    }
+                    
+                    if (resultsSection) {
+                        resultsSection.style.display = 'block';
+                        console.log('📊 Results section and tab shown due to existing analytics data');
+                    }
+                }, 500);
+            }
         }
     } catch (error) {
         console.warn('⚠️ Could not load persisted data:', error);
@@ -1821,6 +2227,8 @@ function startPerformanceMonitoring() {
     
     // Update system metrics every 10 seconds (less frequent as it's more resource intensive)
     setInterval(updateSystemMetrics, 10000);
+    
+    // Real-time metrics are updated when detections are processed
     
     // Initial updates
     updatePerformanceMetrics();
@@ -1942,6 +2350,8 @@ function formatUptime(seconds) {
     }
 }
 
+// Removed random vehicle count updater - now using real detection data
+
 // Enhanced processDetectionResults to auto-save data
 const originalProcessDetectionResults = processDetectionResults;
 function enhancedProcessDetectionResults(detections, isVideo = false) {
@@ -1989,11 +2399,6 @@ function updateProgressBars() {
 
 // Enhanced Analytics Dashboard Update with Animations
 function updateEnhancedDashboard() {
-    // Don't update during reset
-    if (isResetInProgress) {
-        console.log('🚫 Skipping updateEnhancedDashboard - reset in progress');
-        return;
-    }
     
     // Trigger counter animations
     animateCounters();
@@ -2008,17 +2413,11 @@ function updateEnhancedDashboard() {
     updateRecentDetections();
 }
 
-// Add a flag to prevent animation during reset
-let isResetInProgress = false;
 
 // Animated Counter Effect
 function animateCounters() {
-    // Don't animate during reset
-    if (isResetInProgress) {
-        console.log('🚫 Skipping animateCounters - reset in progress');
-        return;
-    }
     
+    // Use real analytics data for animation
     const counters = [
         { element: document.getElementById('total-vehicles'), target: analytics.totalVehicles },
         { element: document.getElementById('total-pedestrians'), target: analytics.totalPedestrians },

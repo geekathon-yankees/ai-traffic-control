@@ -22,9 +22,17 @@ share/python-wheels/
 *.egg
 PIPFILE.lock
 
+# Python bytecode
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # Virtual environments
 .env
+.env.*
 .venv
+.venv/
 env/
 venv/
 ENV/
@@ -56,6 +64,15 @@ logs/
 *.tmp
 *.temp
 .cache/
+tmp/
+temp/
+
+# Uploaded files and processing artifacts
+uploads/
+processed/
+output/
+*.mp4.processed
+*.avi.processed
 
 # Model files and data (if large)
 models/*.pt
